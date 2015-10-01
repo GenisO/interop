@@ -118,3 +118,6 @@ def authenticate_request(username, password, client_key, client_secret):
         return resource_owner_key, resource_owner_secret
 
     raise ValueError("Error in the authenticate process")
+
+# TODO: Implement
+def move(oauth, item_id, is_folder=False):
