@@ -1,8 +1,10 @@
 # encoding: utf-8
 import time
 import sys
-from oauthlib import oauth1
 
+# TODO: Which one?
+from oauthlib import oauth1
+from requests_oauthlib import OAuth1
 
 
 thread_id = 0
@@ -12,10 +14,12 @@ user_node_id_dict = defaultdict(list)
 csv_timestamp = 0
 csv_normalized_timestamp = 1
 csv_user_id = 2
-csv_op = 3
+csv_req_type = 3
 csv_node_id = 4
-csv_size = 5
-csv_user_type = 6
+csv_node_type = 5
+csv_node_ext = 6
+csv_size = 7
+csv_user_type = 8
 
 def event_dispatcher():
     previous_normalized_timestamp = 0
@@ -57,14 +61,21 @@ def process_get(event_args):
         elif len(user_node_id_dict[user_id]) > 0:
             get_content(oauth(user_id), user_node_id_dict[0])
 
+def process_put(event_args):
+    print "PutContentResponse node_id %s of user_id %s" %(event_args[csv_node_id], event_args[csv_user_id])
+    user_id = event_args[csv_user_id]
+    node_id = event_args[csv_node_id]
+    if user_id in user_node_id_dict:
+        if node_id in user_node_id_dict[user_id]:
+            put_content(oauth(user_id), node_id)
+        elif len(user_node_id_dict[user_id]) > 0:
+            put_content(oauth(user_id), user_node_id_dict[0])
+
 def process_make(event_args):
     print "MakeResponse"
 
 def process_move(event_args):
     print "MoveResponse"
-
-def process_put(event_args):
-    print "PutContentResponse"
 
 def process_delete(event_args):
     print "Unlink"
