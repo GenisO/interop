@@ -75,13 +75,13 @@ def move(oauth, item_id, is_folder=False):
         url = URL_STACKSYNC +'/file/'+str(item_id)
 
     new_parent = 0
-    parameters = {"parent":new_parent}
+    parameters = {"parent":str(new_parent)}
 
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.put(url, json.dumps(parameters), headers=headers, auth=oauth)
     return r
-    
+
 def authenticate_request(username, password, client_key, client_secret):
     username = request.POST['username']
     password = request.POST['password']
