@@ -12,7 +12,7 @@ import urlparse
 from requests_oauthlib import OAuth1, OAuth1Session
 
 # TODO: Take parameters from a config file
-URL_STACKSYNC = 'https://IP:8080/v1'
+URL_STACKSYNC = 'http://IP:8080/v1'
 STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://IP:8080/oauth/request_token"
 STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://IP:8080/oauth/access_token"
 STACKSYNC_AUTHORIZE_ENDPOINT = "http://IP:8080/oauth/authorize"
