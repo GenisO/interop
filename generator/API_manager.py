@@ -67,18 +67,21 @@ def unlink(oauth, item_id, is_folder=False):
     return r
 
 def move(oauth, item_id, is_folder=False):
+
     headers = {}
     if is_folder:
         url = URL_STACKSYNC +'/folder/'+str(item_id)
     else:
         url = URL_STACKSYNC +'/file/'+str(item_id)
 
-    parameters = {"parent":0}
+    new_parent = 0
+    parameters = {"parent":new_parent}
+
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.put(url, json.dumps(parameters), headers=headers, auth=oauth)
     return r
-
+    
 def authenticate_request(username, password, client_key, client_secret):
     username = request.POST['username']
     password = request.POST['password']
