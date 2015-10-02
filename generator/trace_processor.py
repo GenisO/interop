@@ -6,6 +6,7 @@ import json
 import os
 import collections
 import subprocess
+import threading
 
 from fake_api import *
 from requests_oauthlib import OAuth1
@@ -32,6 +33,11 @@ oauth_client_key = 0
 oauth_client_secret = 1
 oauth_owner_key = 2
 oauth_owner_secret = 3
+
+class thread_trace_processor(threading.Thread):
+    def run(self):
+        event_dispatcher()
+        return
 
 def event_dispatcher():
     previous_normalized_timestamp = 0
@@ -198,17 +204,16 @@ def process_move(event_args):
             else:
                 raise ValueError("Error user %s does not uploaded any file" %(user_id))
         response = move(oauth(user_id), server_id, is_folder)
-        if response.status_code == 200:
-            # TODO: server_id change with move operation??
-            if is_folder:
-                server_folder_dict[user_id].remove(server_id)
-            else:
-                server_file_dict[user_id].remove(server_id)
-        else:
+        if response.status_code != 200:
             raise ValueError("Error on response with status_code %d" %(response.status_code))
     except Exception as e:
         print "Exception at MoveResponse: trace %s with error message %s" %(event_args, str(e))
 
 if __name__ == "__main__":
-    # Launch main menu
-    event_dispatcher()
+    t = thread_trace_processor()
+    t.setDaemon(True)
+    t.start()
+    print "Thread started. Waiting"
+
+    while t.isAlive():
+        t.join(1)
