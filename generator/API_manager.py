@@ -22,7 +22,6 @@ def put_content(oauth, file_id, file_path):
 
     headers = {}
     url = URL_STACKSYNC +'/file/'+str(file_id)+'/data'
-    #uri, headers, _ = client.sign(url, http_method='GET')
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
     with open (file_path, "r") as myfile:
@@ -33,7 +32,6 @@ def put_content(oauth, file_id, file_path):
 def get_content(oauth, file_id):
     headers = {}
     url = URL_STACKSYNC +'/file/'+str(file_id)+'/data'
-    # uri, headers, _ = client.sign(url, http_method='GET')
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.get(url, headers=headers, auth=oauth)
@@ -45,7 +43,6 @@ def make(oauth, name, is_folder=False):
         url = URL_STACKSYNC +'/folder'
     else:
         url = URL_STACKSYNC +'/file'
-    # uri, headers, _ = client.sign(url, http_method='GET')
     if not name:
         raise ValueError("Can not create a folder without name")
     else:
@@ -56,13 +53,11 @@ def make(oauth, name, is_folder=False):
         return r
 
 def unlink(oauth, item_id, is_folder=False):
-    #TODO: Implement the method for folders and files.
     headers = {}
     if is_folder
         url = URL_STACKSYNC +'/folder/'+str(item_id)
     else:
         url = URL_STACKSYNC +'/file/'+str(item_id)
-    # uri, headers, _ = client.sign(url, http_method='GET')
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
     r = requests.delete(url, headers=headers, auth=oauth)
@@ -77,7 +72,7 @@ def move(oauth, item_id, is_folder=False):
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.put(url, headers=headers, auth=oauth)
-    print 'response', r
+    return r
 
 def authenticate_request(username, password, client_key, client_secret):
     username = request.POST['username']
