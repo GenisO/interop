@@ -19,6 +19,7 @@ STACKSYNC_AUTHORIZE_ENDPOINT = "http://IP:8080/oauth/authorize"
 
 # TODO: convert to update file
 def put_content(oauth, file_name, file_path,  parent=0):
+    print "PUT"
     headers = {}
     if name:
         if parent!=0:
