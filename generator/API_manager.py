@@ -40,17 +40,18 @@ def get_content(oauth, file_id):
 
 def make(oauth, name, is_folder=False):
     headers = {}
-    if is_folder:
-        url = URL_STACKSYNC +'/folder'
-    else:
-        url = URL_STACKSYNC +'/file'
+    headers['StackSync-API'] = "v2"
+    headers['Content-Type'] = "application/json"
     if not name:
         raise ValueError("Can not create a folder without name")
-    else:
-    	parameters = {"name":str(name)}
-        headers['StackSync-API'] = "v2"
-        headers['Content-Type'] = "application/json"
+    if is_folder:
+        url = URL_STACKSYNC +'/folder'
+        parameters = {"name":str(name)}
         r = requests.post(url, json.dumps(parameters), headers=headers, auth=oauth)
+        return r
+    else:
+        url = URL_STACKSYNC +'/file?name='+str(name)
+        r = requests.post(url, headers=headers, auth=oauth)
         return r
 
 def unlink(oauth, item_id, is_folder=False):
