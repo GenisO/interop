@@ -17,20 +17,20 @@ STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://IP:8080/oauth/request_token"
 STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://IP:8080/oauth/access_token"
 STACKSYNC_AUTHORIZE_ENDPOINT = "http://IP:8080/oauth/authorize"
 
-
+# TODO: convert to update file
 def put_content(oauth, file_name, file_path,  parent=0):
+    print "PUT"
     headers = {}
     if name:
         if parent!=0:
     	    url = URL_STACKSYNC +"/file?name="+name+"&parent="+parent
     	else:
     	    url = URL_STACKSYNC +"/file?name="+name
-            path = raw_input("Absolute path of the file:  ")
-            with open (file_path, "r") as myfile:
-                data=myfile.read()
-            headers['StackSync-API'] = "v2"
-            r = requests.post(url, data=data, headers=headers, auth=oauth)
-            return r
+        with open (file_path, "r") as myfile:
+            data=myfile.read()
+        headers['StackSync-API'] = "v2"
+        r = requests.post(url, data=data, headers=headers, auth=oauth)
+        return r
     else:
     	raise ValueError('Bad parameters')
 
@@ -43,6 +43,7 @@ def get_content(oauth, file_id):
     r = requests.get(url, headers=headers, auth=oauth)
     return r
 
+# TODO: add distinction between folder and file, parent always root
 def make(oauth, name, parent=None):
     headers = {}
     url = BASE_URL +'/folder'
@@ -118,3 +119,6 @@ def authenticate_request(username, password, client_key, client_secret):
         return resource_owner_key, resource_owner_secret
 
     raise ValueError("Error in the authenticate process")
+
+# TODO: Implement
+def move(oauth, item_id, is_folder=False):
