@@ -88,7 +88,7 @@ class thread_trace_processor(threading.Thread):
                 elif not is_folder and server_id not in self.server_file_dict[user_id]:
                     self.server_file_dict[user_id].append(server_id)
             else:
-                raise ValueError("Error on response with status_code  %d and text %s" %(response.status_code, response.text))))
+                raise ValueError("Error on response with status_code  %d and text %s" %(response.status_code, response.text))
         except Exception as e:
             logging.debug("Thread %d Exception at MakeResponse: trace %s. Error Description: %s {%s}" %(self.thread_id, event_args, e.message, e.args))
 
@@ -115,7 +115,7 @@ class thread_trace_processor(threading.Thread):
                 if server_id not in self.server_file_dict[user_id]:
                     self.server_file_dict[user_id].append(server_id)
             else:
-                raise ValueError("Error on response with status_code  %d and text %s" %(response.status_code, response.text))))
+                raise ValueError("Error on response with status_code  %d and text %s" %(response.status_code, response.text))
         except Exception as e:
             logging.debug("Thread %d Exception at PutContentResponse: trace %s. Error Description: %s {%s}" %(self.thread_id, event_args, e.message, e.args))
         finally:
@@ -177,7 +177,7 @@ class thread_trace_processor(threading.Thread):
                 else:
                     self.server_file_dict[user_id].remove(server_id)
             else:
-                raise ValueError("Error on response with status_code  %d and text %s" %(response.status_code, response.text))))
+                raise ValueError("Error on response with status_code  %d and text %s" %(response.status_code, response.text))
         except Exception as e:
             logging.debug("Thread %d Exception at Unlink: trace %s. Error Description: %s {%s}" %(self.thread_id, event_args, e.message, e.args))
 
