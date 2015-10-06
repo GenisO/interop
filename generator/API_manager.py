@@ -12,12 +12,11 @@ import urlparse
 from requests_oauthlib import OAuth1, OAuth1Session
 
 # TODO: Take parameters from a config file
-ip = "localhost"
+ip = "IP"
 URL_STACKSYNC = 'http://%s:8080/v1' %(ip)
 STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://%s:8080/oauth/request_token" %(ip)
 STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://%s:8080/oauth/access_token" %(ip)
 STACKSYNC_AUTHORIZE_ENDPOINT = "http://%s:8080/oauth/authorize" %(ip)
-
 
 def put_content(oauth, file_id, file_path):
     headers = {}
@@ -32,6 +31,14 @@ def put_content(oauth, file_id, file_path):
 def get_content(oauth, file_id):
     headers = {}
     url = URL_STACKSYNC +'/file/'+str(file_id)+'/data'
+    headers['StackSync-API'] = "v2"
+    headers['Content-Type'] = "application/json"
+    r = requests.get(url, headers=headers, auth=oauth)
+    return r
+
+def list_root_content(oauth):
+    headers = {}
+    url = URL_STACKSYNC +'/folder/0'
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.get(url, headers=headers, auth=oauth)
@@ -66,7 +73,6 @@ def unlink(oauth, item_id, is_folder=False):
     return r
 
 def move(oauth, item_id, is_folder=False):
-
     headers = {}
     if is_folder:
         url = URL_STACKSYNC +'/folder/'+str(item_id)
