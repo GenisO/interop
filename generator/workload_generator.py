@@ -20,8 +20,8 @@ def print_seq_dots():
 def create_test_user():
     oauth = OAuth1(CLIENT_KEY,
            client_secret=CLIENT_SECRET,
-           resource_owner_key='Sl3UV1wBax51bkgrwiIeq79RRHJ5iI',
-           resource_owner_secret='cq4TCf6jcB8CadhmMXbqmOaO3crh1n')
+           resource_owner_key='wv3EZhts6cy8gy2QmaZMhtbgGHKB2l',
+           resource_owner_secret='nc1DcqKaWVSlcknXNzlRYWAQ2RPZFq')
     user_oauth[0] = oauth
 
 def create_users(user_file):
@@ -30,8 +30,8 @@ def create_users(user_file):
         for user_id in fp:
             oauth = OAuth1(CLIENT_KEY,
                    client_secret=CLIENT_SECRET,
-                   resource_owner_key='Sl3UV1wBax51bkgrwiIeq79RRHJ5iI',
-                   resource_owner_secret='cq4TCf6jcB8CadhmMXbqmOaO3crh1n')
+                   resource_owner_key='wv3EZhts6cy8gy2QmaZMhtbgGHKB2l',
+                   resource_owner_secret='nc1DcqKaWVSlcknXNzlRYWAQ2RPZFq')
             user_oauth[int(user_id)] = oauth
 
 def run_threads_experiment(num_threads):
@@ -73,12 +73,6 @@ def clean_environment():
         except KeyError as e:
             pass
     print
-
-def load_initial_environment():
-    print "\nLoading defaults files"
-    for user_id in user_oauth:
-        print_seq_dots()
-        response = make(user_oauth[user_id], user_id)
 
 def test_api():
     create_test_user()
@@ -132,10 +126,7 @@ if __name__ == "__main__":
         else:
             try:
                 num_threads = int(argv_list[1])
-                # create_users("./traces/test_users.csv")
-                # load_initial_environment()
-                create_users("./traces/interop_backup_users_id.csv")
-                create_users("./traces/interop_cdn_users_id.csv")
+                create_users("./traces/test_users.csv")
                 run_threads_experiment(num_threads)
                 wait_experiment()
             except ValueError:

@@ -9,6 +9,7 @@ import subprocess
 import threading
 import logging
 import logging.handlers
+import copy
 
 from API_manager import *
 from requests_oauthlib import OAuth1
@@ -52,7 +53,22 @@ class thread_trace_processor(threading.Thread):
         self.num_threads = p_total_threads
 
     def run(self):
+        self.load_initial_environment()
         self.event_dispatcher()
+
+    def load_initial_environment(self):
+        for user_id in self.user_oauth:
+            if int(user_id) % self.num_threads == self.thread_id:
+                fake_event_args = []
+                fake_event_args.append("0")  # csv_timestamp
+                fake_event_args.append("0")  # csv_normalized_timestamp
+                fake_event_args.append(str(user_id))  # csv_user_id
+                fake_event_args.append("MakeResponse")  # csv_req_type
+                fake_event_args.append(str(user_id))  # csv_node_id
+                fake_event_args.append("File")  # csv_node_type
+                fake_event_args.append("0")  # csv_size
+                fake_event_args.append("Fake")  # csv_user_type
+                self.process_make(fake_event_args)
 
     def event_dispatcher(self):
         previous_normalized_timestamp = 0
@@ -99,9 +115,10 @@ class thread_trace_processor(threading.Thread):
                     self.server_folder_dict[user_id].append(server_id)
                 elif not is_folder and server_id not in self.server_file_dict[user_id]:
                     self.server_file_dict[user_id].append(server_id)
-                elapsed = end - start
-                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], "NULL")
+                elapsed = int(end - start)
+                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], event_args[self.csv_user_type])
             elif response.status_code == 400 and "This name is already used in the same folder. Please use a different one." in response.text:
+                # Ensure we have it mapped
                 response = list_root_content(self.oauth(user_id))
                 json_data = response.json()
                 content_root = json_data["contents"]
@@ -154,10 +171,10 @@ class thread_trace_processor(threading.Thread):
             if response.status_code == 200 or response.status_code == 201:
                 if server_id not in self.server_file_dict[user_id]:
                     self.server_file_dict[user_id].append(server_id)
-                elapsed = end - start
+                elapsed = int(end - start)
                 json_data = json.loads(response.text)
                 size = json_data["size"]
-                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), self.event_args[self.csv_node_type], size)
+                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], size)
             else:
                 raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
         except subprocess.CalledProcessError as e:
@@ -181,13 +198,13 @@ class thread_trace_processor(threading.Thread):
                 elif len(self.server_file_dict[user_id])>0:
                     server_id = random.sample(self.server_file_dict[user_id],1)
                 else:
-                    raise ValueError("Error user %s does not have any file to download" %(user_id))
+                    raise ValueError("Error user %d does not have any file to download" %(user_id))
                 start = int(time.time())
                 response = get_content(self.oauth(user_id), server_id)
                 end = int(time.time())
                 if response.status_code != 200:
-                    raise ValueError("Error on response with status_code %d" %(response))
-                elapsed = end - start
+                    raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
+                elapsed = int(end - start)
                 size = response.headers["content-length"]
                 process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], size)
             else:
@@ -235,12 +252,12 @@ class thread_trace_processor(threading.Thread):
                         self.server_folder_dict[user_id].remove(server_id)
                     else:
                         self.server_file_dict[user_id].remove(server_id)
-                    elapsed = end - start
-                    process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], "NULL")
+                    elapsed = int(end - start)
+                    process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], event_args[self.csv_node_type])
                 else:
                     raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
             else:
-                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(0), str(node_id), event_args[self.csv_node_type], "FAKE")
+                process_log(str(int(time.time())), str(user_id), event_args[self.csv_req_type], "0", str(node_id), event_args[self.csv_node_type], "FAKE")
         except Exception as e:
             process_error_log("Exception at Unlink: trace %s. Error Description: type=%s message={%s} args={%s}" %(event_args, type(e), e.message, e.args))
 
@@ -275,7 +292,7 @@ class thread_trace_processor(threading.Thread):
             end = int(time.time())
             if response.status_code != 200:
                 raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
-            elapsed = end - start
+            elapsed = int(end - start)
             process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], "NULL")
         except Exception as e:
             process_error_log("Exception at MoveResponse: trace %s. Error Description: type=%s message={%s} args={%s}" %(event_args, type(e), e.message, e.args))
