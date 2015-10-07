@@ -15,7 +15,7 @@ from requests_oauthlib import OAuth1
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-handler = logging.handlers.RotatingFileHandler("interop_experiment.log", maxBytes=20000000, backupCount=10000)
+handler = logging.handlers.RotatingFileHandler("interop_experiment.log", maxBytes=20000000, backupCount=10)
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter("[%(levelname)s];%(asctime)s;%(message)s")
 handler.setFormatter(formatter)
@@ -87,9 +87,9 @@ class thread_trace_processor(threading.Thread):
         node_id = int(event_args[self.csv_node_id])
         is_folder = event_args[self.csv_node_type] == "Directory"
         try:
-            start = time.time()
+            start = int(time.time())
             response = make(self.oauth(user_id), node_id, is_folder)
-            end = time.time()
+            end = int(time.time())
             if response.status_code == 201:
                 json_data = json.loads(response.text)
                 server_id = int(json_data["id"])
@@ -132,8 +132,10 @@ class thread_trace_processor(threading.Thread):
         local_path = "./%s.file" %(self.thread_id)
         try:
             if node_id not in self.node_server_id_dict:
-                event_args[self.csv_node_type] = "File"
-                self.process_make(event_args)
+                mod_event_args = copy.deepcopy(event_args)
+                mod_event_args[self.csv_node_type] = "File"
+                mod_event_args[self.csv_req_type] = "MakeResponse"
+                self.process_make(mod_event_args)
             server_id = self.node_server_id_dict[node_id]
             if server_id not in self.server_file_dict[user_id]:
                 if len(self.server_file_dict[user_id])>0:
@@ -146,16 +148,16 @@ class thread_trace_processor(threading.Thread):
                 size = 2
             with open(local_path, "w") as f:
                 subprocess.check_call(["fallocate", "-l", str(size), local_path])
-            start = time.time()
+            start = int(time.time())
             response = put_content(self.oauth(user_id), server_id, local_path)
-            end = time.time()
+            end = int(time.time())
             if response.status_code == 200 or response.status_code == 201:
                 if server_id not in self.server_file_dict[user_id]:
                     self.server_file_dict[user_id].append(server_id)
                 elapsed = end - start
                 json_data = json.loads(response.text)
                 size = json_data["size"]
-                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], size)
+                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), self.event_args[self.csv_node_type], size)
             else:
                 raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
         except subprocess.CalledProcessError as e:
@@ -180,9 +182,9 @@ class thread_trace_processor(threading.Thread):
                     server_id = random.sample(self.server_file_dict[user_id],1)
                 else:
                     raise ValueError("Error user %s does not have any file to download" %(user_id))
-                start = time.time()
+                start = int(time.time())
                 response = get_content(self.oauth(user_id), server_id)
-                end = time.time()
+                end = int(time.time())
                 if response.status_code != 200:
                     raise ValueError("Error on response with status_code %d" %(response))
                 elapsed = end - start
@@ -198,13 +200,16 @@ class thread_trace_processor(threading.Thread):
         user_id = int(event_args[self.csv_user_id])
         node_id = int(event_args[self.csv_node_id])
         is_folder = event_args[self.csv_node_type] == "Directory"
+        fake_delete = False
         try:
             if is_folder:
                 if user_id in self.server_folder_dict:
                     if node_id in self.node_server_id_dict:
                         server_id = self.node_server_id_dict[node_id]
-                    elif len(self.server_folder_dict[user_id])>0:
+                    elif len(self.server_folder_dict[user_id])>1:
                         server_id = random.sample(self.server_folder_dict[user_id],1)
+                    elif len(self.server_folder_dict[user_id])==1:
+                        fake_delete = True
                     else:
                         raise ValueError("Error user %s does not have any folder to delete" %(user_id))
                 else:
@@ -213,24 +218,29 @@ class thread_trace_processor(threading.Thread):
                 if user_id in self.server_file_dict:
                     if node_id in self.node_server_id_dict:
                         server_id = self.node_server_id_dict[node_id]
-                    elif len(self.server_file_dict[user_id])>0:
+                    elif len(self.server_file_dict[user_id])>1:
                         server_id = random.sample(self.server_file_dict[user_id],1)
+                    elif len(self.server_file_dict[user_id])==1:
+                        fake_delete = True
                     else:
                         raise ValueError("Error user %s does not have any file to delete" %(user_id))
                 else:
                     raise ValueError("Error user %s does not uploaded any file" %(user_id))
-            start = time.time()
-            response = unlink(self.oauth(user_id), server_id, is_folder)
-            end = time.time()
-            if response.status_code == 200:
-                if is_folder:
-                    self.server_folder_dict[user_id].remove(server_id)
+            if not fake_delete:
+                start = int(time.time())
+                response = unlink(self.oauth(user_id), server_id, is_folder)
+                end = int(time.time())
+                if response.status_code == 200:
+                    if is_folder:
+                        self.server_folder_dict[user_id].remove(server_id)
+                    else:
+                        self.server_file_dict[user_id].remove(server_id)
+                    elapsed = end - start
+                    process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], "NULL")
                 else:
-                    self.server_file_dict[user_id].remove(server_id)
-                elapsed = end - start
-                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(elapsed), str(node_id), event_args[self.csv_node_type], "NULL")
+                    raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
             else:
-                raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
+                process_log(str(start), str(user_id), event_args[self.csv_req_type], str(0), str(node_id), event_args[self.csv_node_type], "FAKE")
         except Exception as e:
             process_error_log("Exception at Unlink: trace %s. Error Description: type=%s message={%s} args={%s}" %(event_args, type(e), e.message, e.args))
 
@@ -260,9 +270,9 @@ class thread_trace_processor(threading.Thread):
                         raise ValueError("Error user %s does not have any file to move" %(user_id))
                 else:
                     raise ValueError("Error user %s does not uploaded any file" %(user_id))
-            start = time.time()
+            start = int(time.time())
             response = move(self.oauth(user_id), server_id, is_folder)
-            end = time.time()
+            end = int(time.time())
             if response.status_code != 200:
                 raise ValueError("Error on response with status_code %d and text %s" %(response.status_code, response.text))
             elapsed = end - start

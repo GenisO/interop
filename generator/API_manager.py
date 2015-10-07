@@ -87,9 +87,7 @@ def move(oauth, item_id, is_folder=False):
     r = requests.put(url, json.dumps(parameters), headers=headers, auth=oauth)
     return r
 
-def authenticate_request(username, password, client_key, client_secret):
-    username = request.POST['username']
-    password = request.POST['password']
+def authenticate_request(useremail, password, client_key, client_secret):
     oauth = OAuth1(client_key=client_key, client_secret=client_secret, callback_uri='oob')
     headers = {"STACKSYNC_API":"v2"}
     try:
@@ -105,13 +103,12 @@ def authenticate_request(username, password, client_key, client_secret):
 
     authorize_url = STACKSYNC_AUTHORIZE_ENDPOINT + '?oauth_token=' + resource_owner_key
 
-    params = urlencode({'email': username, 'password': password, 'permission':'allow'})
+    params = urllib.urlencode({'email': useremail, 'password': password, 'permission':'allow'})
     headers = {"Content-Type":"application/x-www-form-urlencoded", "STACKSYNC_API":"v2"}
     try:
         response = requests.post(authorize_url, data=params, headers=headers, verify=False)
     except:
-        raise ValueError("Error in the authenticate process")
-
+        raise ValueError("Error in the authenticate process 1")
     if "application/x-www-form-urlencoded" == response.headers['Content-Type']:
         parameters = parse_qs(response.content)
         verifier = parameters.get('verifier')[0]
@@ -123,13 +120,13 @@ def authenticate_request(username, password, client_key, client_secret):
                verifier=verifier,
                callback_uri='oob')
         try:
-            r = requests.post(url=settings.STACKSYNC_ACCESS_TOKEN_ENDPOINT, auth=oauth2, headers=headers, verify=False)
+            r = requests.post(url=STACKSYNC_ACCESS_TOKEN_ENDPOINT, auth=oauth2, headers=headers, verify=False)
         except:
-            raise ValueError("Error in the authenticate process")
+            raise ValueError("Error in the authenticate process 2")
         credentials = parse_qs(r.content)
         resource_owner_key = credentials.get('oauth_token')[0]
         resource_owner_secret = credentials.get('oauth_token_secret')[0]
 
         return resource_owner_key, resource_owner_secret
 
-    raise ValueError("Error in the authenticate process")
+    raise ValueError("Error in the authenticate process 3")
