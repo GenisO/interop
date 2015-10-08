@@ -13,36 +13,40 @@ from requests_oauthlib import OAuth1, OAuth1Session
 
 # TODO: Take parameters from a config file
 ip = "localhost"
-URL_STACKSYNC = 'http://%s:8080/v1' %(ip)
-STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://%s:8080/oauth/request_token" %(ip)
-STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://%s:8080/oauth/access_token" %(ip)
-STACKSYNC_AUTHORIZE_ENDPOINT = "http://%s:8080/oauth/authorize" %(ip)
+URL_STACKSYNC = 'http://%s:8080/v1' % (ip)
+STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://%s:8080/oauth/request_token" % (ip)
+STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://%s:8080/oauth/access_token" % (ip)
+STACKSYNC_AUTHORIZE_ENDPOINT = "http://%s:8080/oauth/authorize" % (ip)
+
 
 def put_content(oauth, file_id, file_path):
     headers = {}
-    url = URL_STACKSYNC +'/file/'+str(file_id)+'/data'
+    url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
-    with open (file_path, "r") as myfile:
-        data=myfile.read()
-    r = requests.put(url,data=data, headers=headers, auth=oauth)
+    with open(file_path, "r") as myfile:
+        data = myfile.read()
+    r = requests.put(url, data=data, headers=headers, auth=oauth)
     return r
+
 
 def get_content(oauth, file_id):
     headers = {}
-    url = URL_STACKSYNC +'/file/'+str(file_id)+'/data'
+    url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.get(url, headers=headers, auth=oauth)
     return r
 
+
 def list_root_content(oauth):
     headers = {}
-    url = URL_STACKSYNC +'/folder/0'
+    url = URL_STACKSYNC + '/folder/0'
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.get(url, headers=headers, auth=oauth)
     return r
+
 
 def make(oauth, name, is_folder=False):
     headers = {}
@@ -51,45 +55,48 @@ def make(oauth, name, is_folder=False):
     if not name:
         raise ValueError("Can not create a folder without name")
     if is_folder:
-        url = URL_STACKSYNC +'/folder'
-        parameters = {"name":str(name)}
+        url = URL_STACKSYNC + '/folder'
+        parameters = {"name": str(name)}
         r = requests.post(url, json.dumps(parameters), headers=headers, auth=oauth)
         return r
     else:
-        url = URL_STACKSYNC +'/file?name='+str(name)
+        url = URL_STACKSYNC + '/file?name=' + str(name)
         r = requests.post(url, headers=headers, auth=oauth)
         return r
+
 
 def unlink(oauth, item_id, is_folder=False):
     headers = {}
     if is_folder:
-        url = URL_STACKSYNC +'/folder/'+str(item_id)
+        url = URL_STACKSYNC + '/folder/' + str(item_id)
     else:
-        url = URL_STACKSYNC +'/file/'+str(item_id)
+        url = URL_STACKSYNC + '/file/' + str(item_id)
 
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
     r = requests.delete(url, headers=headers, auth=oauth)
     return r
 
+
 def move(oauth, item_id, is_folder=False):
     headers = {}
     if is_folder:
-        url = URL_STACKSYNC +'/folder/'+str(item_id)
+        url = URL_STACKSYNC + '/folder/' + str(item_id)
     else:
-        url = URL_STACKSYNC +'/file/'+str(item_id)
+        url = URL_STACKSYNC + '/file/' + str(item_id)
 
     new_parent = 0
-    parameters = {"parent":str(new_parent)}
+    parameters = {"parent": str(new_parent)}
 
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.put(url, json.dumps(parameters), headers=headers, auth=oauth)
     return r
 
+
 def authenticate_request(useremail, password, client_key, client_secret):
     oauth = OAuth1(client_key=client_key, client_secret=client_secret, callback_uri='oob')
-    headers = {"STACKSYNC_API":"v2"}
+    headers = {"STACKSYNC_API": "v2"}
     try:
         r = requests.post(url=STACKSYNC_REQUEST_TOKEN_ENDPOINT, auth=oauth, headers=headers, verify=False)
         if r.status_code != 200:
@@ -103,8 +110,8 @@ def authenticate_request(useremail, password, client_key, client_secret):
 
     authorize_url = STACKSYNC_AUTHORIZE_ENDPOINT + '?oauth_token=' + resource_owner_key
 
-    params = urllib.urlencode({'email': useremail, 'password': password, 'permission':'allow'})
-    headers = {"Content-Type":"application/x-www-form-urlencoded", "STACKSYNC_API":"v2"}
+    params = urllib.urlencode({'email': useremail, 'password': password, 'permission': 'allow'})
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "STACKSYNC_API": "v2"}
     try:
         response = requests.post(authorize_url, data=params, headers=headers, verify=False)
     except:
@@ -114,11 +121,11 @@ def authenticate_request(useremail, password, client_key, client_secret):
         verifier = parameters.get('verifier')[0]
 
         oauth2 = OAuth1(client_key,
-               client_secret=client_secret,
-               resource_owner_key=resource_owner_key,
-               resource_owner_secret=resource_owner_secret,
-               verifier=verifier,
-               callback_uri='oob')
+                        client_secret=client_secret,
+                        resource_owner_key=resource_owner_key,
+                        resource_owner_secret=resource_owner_secret,
+                        verifier=verifier,
+                        callback_uri='oob')
         try:
             r = requests.post(url=STACKSYNC_ACCESS_TOKEN_ENDPOINT, auth=oauth2, headers=headers, verify=False)
         except:
