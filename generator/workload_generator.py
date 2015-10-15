@@ -3,7 +3,7 @@ from collections import defaultdict
 import sys
 from API_manager import *
 from requests_oauthlib import OAuth1
-from trace_processor import thread_trace_processor, User
+from trace_processor import ThreadTraceProcessor, User
 from random import random
 from decimal import *
 
@@ -16,6 +16,7 @@ CLIENT_SECRET = "c168e65c18d75b35d8999b534a3776cf"
 
 users_dict = dict()
 
+
 def print_seq_dots():
     sys.stdout.write('.')
     sys.stdout.flush()
@@ -23,48 +24,48 @@ def print_seq_dots():
 
 def create_test_user():
     oauth = OAuth1(CLIENT_KEY,
-                   client_secret=CLIENT_SECRET,
-                   resource_owner_key='sMuUlMeptCOHmXoefADVZQFSG9HOQH',
-                   resource_owner_secret='yGtFhGjKnSYLfoBLDjinW40UyrImn8')
+                        client_secret=CLIENT_SECRET,
+                        resource_owner_key="dfc8aff1-4e7a-4229-abd0-3e23c287200a",
+                        resource_owner_secret="efc136e7-e184-4ac0-ad90-88235012c9bf")
     user_oauth[0] = oauth
 
 
-def read_users(user_file):
-    # TODO: Make proper authentication
-    #user_id,owner_key,owner_secret,shared_folder_id,provider,friends_num,user2,factor2,user3,factor3,...
+def read_users_info(user_file):
+    # user_id, owner_key, owner_secret, provider, shared_folder_id, file0_id, friends_num, user2, factor2, user3, factor3, ...
     with open(user_file, "r") as fp:
         for i, line in enumerate(fp):
-            if i > 1:
+            if i > 0:
                 array_line = line.rstrip('\n').split(",")
 
                 user_id = int(array_line[0])
                 owner_key = str(array_line[1])
                 owner_secret = str(array_line[2])
-                shared_folder_id = int(array_line[3])
-                provider = str(array_line[4])
-                friends_num = int(array_line[5])
+                provider = str(array_line[3])
+                shared_folder_id = int(array_line[4])
+                file0_id = int(array_line[5])
+                friends_num = int(array_line[6])
                 list_size = len(array_line)
 
                 friends_dict = dict()
-                for j in range(6, list_size, 2):
+                for j in range(7, list_size, 2):
                     friend_id = int(array_line[j])
-                    friend_factor = Decimal(str(array_line[j+1]))
+                    friend_factor = Decimal(str(array_line[j + 1]))
                     friends_dict[friend_id] = friend_factor
 
                 oauth = OAuth1(CLIENT_KEY,
-                           client_secret=CLIENT_SECRET,
-                           resource_owner_key=owner_key,
-                           resource_owner_secret=owner_secret)
-
-                user = User(user_id, oauth, shared_folder_id, provider, friends_dict)
+                               client_secret=CLIENT_SECRET,
+                               resource_owner_key=owner_key,
+                               resource_owner_secret=owner_secret)
+                # User(user_id, oauth, shared_folder_id, provider, friends_id_factor_dict=dict(), file0_id=None)
+                user = User(user_id, oauth, shared_folder_id, provider, friends_dict, file0_id)
                 users_dict[user_id] = user
 
 
 def run_threads_experiment(num_threads, file_trace_path):
     print "\nStarting experiment with %d threads" % (num_threads)
     for i in range(0, num_threads):
-        t = thread_trace_processor(i, num_threads, file_trace_path, users_dict)
-        t.setDaemon(True)
+        t = ThreadTraceProcessor(i, num_threads, file_trace_path, users_dict)
+        t.setDaemon(False)
         threads_pool.append(t)
         t.start()
 
@@ -83,7 +84,7 @@ def wait_experiment():
 def clean_environment():
     print "\nCleaning environment"
     create_test_user()
-    response = list_root_content(user_oauth[0])
+    response = list_content(user_oauth[0])
     json_data = response.json()
     content_root = json_data["contents"]
     for line in content_root:
@@ -99,10 +100,11 @@ def clean_environment():
     print
 
 
-def test_api():
+def test_api(path):
     create_test_user()
+    #shared_ss dir -> server_id = 9472
     print "MAKE"
-    response = make(user_oauth[0], "15796961")
+    response = make(user_oauth[0], "151548", parent_id=9472, is_folder=False, is_ss_provider=False)
     print response
     print response.headers
     print response.text
@@ -112,24 +114,25 @@ def test_api():
     server_id = json_data["id"]
     print server_id
 
-    file_path = "./README.md"
+    file_path = path +"/../README.md"
     print "PUT"
-    response = put_content(user_oauth[0], server_id, file_path)
+    response = put_content(user_oauth[0], server_id, file_path, is_ss_provider=False)
     print response
+    print response.text
 
     print "GET"
-    response = get_content(user_oauth[0], server_id)
+    response = get_content(user_oauth[0], server_id, is_ss_provider=False)
     print response
     print response.headers
     print response.text
 
-    print "MOVE"
-    response = move(user_oauth[0], server_id)
-    print response
-    print response.text
+    # print "MOVE"
+    # response = move(user_oauth[0], server_id, is_ss_provider=False)
+    # print response
+    # print response.text
 
     print "DELETE"
-    response = unlink(user_oauth[0], server_id)
+    response = unlink(user_oauth[0], server_id, is_ss_provider=False)
     print response
     print response.text
 
@@ -146,8 +149,8 @@ def print_usage():
 
 if __name__ == "__main__":
     script_path = __file__[:__file__.rfind("/")]
-    file_users_path = script_path + "/../traces/test_users.csv"
-    file_trace_path = script_path + "/../traces/test_ops.csv"
+    file_users_path = script_path + "/../target/ast3_full_interop_info.csv"
+    file_trace_path = script_path + "/../target/ast3_ops.csv"
     print __file__
     try:
         argv_list = sys.argv
@@ -157,7 +160,7 @@ if __name__ == "__main__":
         else:
             try:
                 num_threads = int(argv_list[1])
-                read_users(file_users_path)
+                read_users_info(file_users_path)
                 run_threads_experiment(num_threads, file_trace_path)
                 wait_experiment()
             except ValueError:
@@ -165,7 +168,8 @@ if __name__ == "__main__":
                     clean_environment()
                 elif argv_list[1] == "list":
                     create_test_user()
-                    response = list_root_content(user_oauth[0])
+                    folder_id = raw_input("Folder id: ")
+                    response = list_content(user_oauth[0], parent=folder_id, is_ss_provider=False)
                     print response.text
                     json_data = response.json()
                     content_root = json_data["contents"]
@@ -179,13 +183,12 @@ if __name__ == "__main__":
                         except:
                             pass
                 elif argv_list[1] == "test":
-                    test_api()
+                    test_api(script_path)
                 elif argv_list[1] == "interop":
-                    read_users(script_path)
+                    read_users_info(script_path)
                 else:
                     print "ERROR: Option %s is not permitted" % (argv_list[1])
                     print_usage()
 
     except (KeyboardInterrupt, SystemExit):
         print ("\nExperiment killed")
-

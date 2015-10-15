@@ -25,8 +25,11 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-def process_log(tstamp, user_id, user_type, req_t, origin_provider, destination_provider, node_id, node_type, size, elapsed, friends_number):
-    logger.info("[TRACE];%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s" % (str(tstamp), str(user_id), str(user_type), str(req_t), str(origin_provider), str(destination_provider), str(node_id), str(node_type), str(size), str(elapsed), str(friends_number)))
+def process_log(tstamp, user_id, user_type, req_t, origin_provider, destination_provider, node_id, node_type, size,
+                elapsed, friends_number):
+    logger.info("[TRACE];%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s" % (
+        str(tstamp), str(user_id), str(user_type), str(req_t), str(origin_provider), str(destination_provider),
+        str(node_id), str(node_type), str(size), str(elapsed), str(friends_number)))
 
 
 def process_debug_log(message):
@@ -41,22 +44,25 @@ class User(object):
     def __str__(self):
         return str(self.user_id)
 
-    def __init__(self, user_id, oauth, shared_folder_id, provider, friends_id_factor_dict=dict()):
+    def __init__(self, user_id, oauth, shared_folder_id, provider, friends_id_factor_dict=dict(), file0_id=None):
         self.id = user_id
         self.oauth = oauth
         self.shared_folder_id = shared_folder_id
         self.provider = provider
         self.friends_id_factor_dict = friends_id_factor_dict
+        self.file0_id = file0_id
+        # TODO: Missing info?
         self.workspaces_oauth = dict()
 
-class thread_trace_processor(threading.Thread):
+
+class ThreadTraceProcessor(threading.Thread):
     def __init__(self, p_thread_num, p_total_threads, p_trace_path, p_users_dict):
         threading.Thread.__init__(self)
 
         self.users_dict = p_users_dict
         self.node_server_id_dict = dict()
-        self.workspace_files = collections.defaultdict(collections.defaultdict(list))
-        self.workspace_folders = collections.defaultdict(collections.defaultdict(list))
+        self.workspace_files = collections.defaultdict(lambda: collections.defaultdict(list))
+        self.workspace_folders = collections.defaultdict(lambda: collections.defaultdict(list))
 
         self.csv_timestamp = 0
         self.csv_normalized_timestamp = 1
@@ -64,41 +70,26 @@ class thread_trace_processor(threading.Thread):
         self.csv_req_type = 3
         self.csv_node_id = 4
         self.csv_node_type = 5
-        self.csv_size = 6
-        self.csv_user_type = 7
-        self.csv_friend_id = 8
-        self.csv_provider = 9
+        self.csv_ext = 6
+        self.csv_size = 7
+        self.csv_user_type = 8
+        self.csv_friend_id = 9
+        self.csv_provider = 10
 
         self.thread_id = p_thread_num
         self.num_threads = p_total_threads
 
         self.trace_path = p_trace_path
 
-
     def run(self):
         self.load_initial_environment()
         self.event_dispatcher()
 
     def load_initial_environment(self):
-        # TODO: Definition of shared directories
         for user_id in self.users_dict:
-            if int(user_id) % self.num_threads == self.thread_id:
-                user = self.user_dict[int(user_id)]
-                provider = user.provider
-
-                # Add some staff to shared folder
-                fake_event_args = list()
-                fake_event_args.append("0")  # csv_timestamp
-                fake_event_args.append("0")  # csv_normalized_timestamp
-                fake_event_args.append(str(user_id))  # csv_user_id
-                fake_event_args.append("MakeResponse")  # csv_req_type
-                fake_event_args.append(str(user_id))  # csv_node_id
-                fake_event_args.append("File")  # csv_node_type
-                fake_event_args.append("0")  # csv_size
-                fake_event_args.append("Fake")  # csv_user_type
-                fake_event_args.append("0")  # csv_friend_id
-                fake_event_args.append(provider)  # csv_provider
-                self.process_make(fake_event_args)
+            user = self.users_dict[user_id]
+            self.workspace_folders[user.shared_folder_id] = user.shared_folder_id
+            self.workspace_files[user.shared_folder_id] = user.file0_id
 
     def event_dispatcher(self):
         previous_normalized_timestamp = 0
@@ -106,6 +97,7 @@ class thread_trace_processor(threading.Thread):
             for line in fp:
                 event = line.rstrip("\n").split(",")
                 t_sleep = int(event[self.csv_normalized_timestamp]) - previous_normalized_timestamp
+                t_sleep = int(t_sleep/1000)
                 time.sleep(t_sleep)
                 previous_normalized_timestamp = int(event[self.csv_normalized_timestamp])
                 user_id = int(event[self.csv_user_id])
@@ -131,7 +123,7 @@ class thread_trace_processor(threading.Thread):
 
         factors = user.friends_id_factor_dict.values()
         factors.sort()
-        target = factors[0]
+        target = factors[-1]
         multiple = False
         for v in factors:
             if p < v:
@@ -146,19 +138,19 @@ class thread_trace_processor(threading.Thread):
         for u in user.friends_id_factor_dict:
             if user.friends_id_factor_dict[u] == target:
                 friends_id.append(u)
-                if multiple:
+                if not multiple:
                     break
 
         friend_id = random.sample(friends_id, 1)[0]
 
-        provider = self.users_dict[friend_id].provider
+        friend_provider = self.users_dict[friend_id].provider
 
         event_args.append(friend_id)  # csv_friend_id
-        event_args.append(provider)  # csv_provider
+        event_args.append(friend_provider)  # csv_provider
         func(event_args)
 
     def workspace_oauth(self, user_id, workspace):
-        if int(user_id) not in self.user_oauth:
+        if int(user_id) not in self.users_dict:
             raise ValueError("Error no oauth for user %s" % (user_id))
         return self.users_dict[int(user_id)].workspaces_oauth[workspace]
 
@@ -192,10 +184,11 @@ class thread_trace_processor(threading.Thread):
                 elapsed = int(end - start)
                 process_log(start, user_id, event_args[self.csv_user_type], event_args[self.csv_req_type],
                             self.users_dict[user_id].provider, self.users_dict[friend_id].provider, server_id,
-                            event_args[self.csv_node_type], event_args[self.csv_size], elapsed, len(self.users_dict[user_id].friends_id_factor_dict))
+                            event_args[self.csv_node_type], event_args[self.csv_size], elapsed,
+                            len(self.users_dict[user_id].friends_id_factor_dict))
             elif response.status_code == 400 and (
-                        "This name is already used in the same folder. Please use a different one." in response.text or
-                        "Folder already exists." in response.text):
+                            "This name is already used in the same folder. Please use a different one." in response.text or
+                            "Folder already exists." in response.text):
                 # TODO: Ensure we have it mapped
                 pass
                 # response = list_root_content(self.workspace_oauth(user_id))
@@ -268,7 +261,8 @@ class thread_trace_processor(threading.Thread):
 
                 process_log(start, user_id, event_args[self.csv_user_type], event_args[self.csv_req_type],
                             self.users_dict[user_id].provider, self.users_dict[friend_id].provider, server_id,
-                            event_args[self.csv_node_type], size, elapsed, len(self.users_dict[user_id].friends_id_factor_dict))
+                            event_args[self.csv_node_type], size, elapsed,
+                            len(self.users_dict[user_id].friends_id_factor_dict))
             else:
                 raise ValueError(
                     "Error on response with status_code %d and text %s" % (response.status_code, response.text))
@@ -318,7 +312,8 @@ class thread_trace_processor(threading.Thread):
 
                 process_log(start, user_id, event_args[self.csv_user_type], event_args[self.csv_req_type],
                             self.users_dict[user_id].provider, self.users_dict[friend_id].provider, server_id,
-                            event_args[self.csv_node_type], size, elapsed, len(self.users_dict[user_id].friends_id_factor_dict))
+                            event_args[self.csv_node_type], size, elapsed,
+                            len(self.users_dict[user_id].friends_id_factor_dict))
             else:
                 raise ValueError("Error workspace %s does not have any file" % (workspace))
         except Exception as e:
@@ -383,15 +378,17 @@ class thread_trace_processor(threading.Thread):
                     elapsed = int(end - start)
 
                     process_log(start, user_id, event_args[self.csv_user_type], event_args[self.csv_req_type],
-                            self.users_dict[user_id].provider, self.users_dict[friend_id].provider, server_id,
-                            event_args[self.csv_node_type], event_args[self.csv_size], elapsed, len(self.users_dict[user_id].friends_id_factor_dict))
+                                self.users_dict[user_id].provider, self.users_dict[friend_id].provider, server_id,
+                                event_args[self.csv_node_type], event_args[self.csv_size], elapsed,
+                                len(self.users_dict[user_id].friends_id_factor_dict))
                 else:
                     raise ValueError(
                         "Error on response with status_code %d and text %s" % (response.status_code, response.text))
             else:
                 process_log(str(time.time()), user_id, event_args[self.csv_user_type], event_args[self.csv_req_type],
                             self.users_dict[user_id].provider, self.users_dict[friend_id].provider, "-1",
-                            event_args[self.csv_node_type], event_args[self.csv_size], 0, len(self.users_dict[user_id].friends_id_factor_dict))
+                            event_args[self.csv_node_type], event_args[self.csv_size], 0,
+                            len(self.users_dict[user_id].friends_id_factor_dict))
         except Exception as e:
             process_error_log("Exception at Unlink: trace %s. Error Description: type=%s message={%s} args={%s}" % (
                 event_args, type(e), e.message, e.args))
@@ -440,8 +437,9 @@ class thread_trace_processor(threading.Thread):
             elapsed = int(end - start)
 
             process_log(start, user_id, event_args[self.csv_user_type], event_args[self.csv_req_type],
-                            self.users_dict[user_id].provider, self.users_dict[friend_id].provider, server_id,
-                            event_args[self.csv_node_type], event_args[self.csv_size], elapsed, len(self.users_dict[user_id].friends_id_factor_dict))
+                        self.users_dict[user_id].provider, self.users_dict[friend_id].provider, server_id,
+                        event_args[self.csv_node_type], event_args[self.csv_size], elapsed,
+                        len(self.users_dict[user_id].friends_id_factor_dict))
         except Exception as e:
             process_error_log(
                 "Exception at MoveResponse: trace %s. Error Description: type=%s message={%s} args={%s}" % (

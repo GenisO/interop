@@ -29,10 +29,11 @@ NEC_AUTHORIZE_ENDPOINT = "http://%s/oauth/api/cloudspaces/authorize" % (ip_nec)
 def put_content(oauth, file_id, file_path, is_ss_provider):
     headers = {}
     if is_ss_provider:
-        url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
+        URL_BASIC = URL_STACKSYNC
     else:
-        url = URL_NEC + '/file/' + str(file_id) + '/data'
+        URL_BASIC = URL_NEC
 
+    url = URL_BASIC + '/file/' + str(file_id) + '/data'
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
     with open(file_path, "r") as myfile:
@@ -44,9 +45,11 @@ def put_content(oauth, file_id, file_path, is_ss_provider):
 def get_content(oauth, file_id, is_ss_provider=True):
     headers = {}
     if is_ss_provider:
-        url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
+        URL_BASIC = URL_STACKSYNC
     else:
-        url = URL_NEC + '/file/' + str(file_id) + '/data'
+        URL_BASIC = URL_NEC
+
+    url = URL_BASIC + '/file/' + str(file_id) + '/data'
 
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
@@ -54,50 +57,61 @@ def get_content(oauth, file_id, is_ss_provider=True):
     return r
 
 
-def list_root_content(oauth):
+def list_content(oauth, parent=0, is_ss_provider=True):
     headers = {}
-    url = URL_STACKSYNC + '/folder/0'
+    if is_ss_provider:
+        URL_BASIC = URL_STACKSYNC
+    else:
+        URL_BASIC = URL_NEC
+
+    url = URL_BASIC + '/folder/' + str(parent) + "/contents"
+
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.get(url, headers=headers, auth=oauth)
     return r
 
-# TODO
+
 def make(oauth, name, parent_id=0, is_folder=False, is_ss_provider=True):
     headers = {}
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
+
+    if is_ss_provider:
+        URL_BASIC = URL_STACKSYNC
+    else:
+        URL_BASIC = URL_NEC
+
     if not name:
         raise ValueError("Can not create a folder without name")
     if is_folder:
-        if is_ss_provider:
-            url = URL_STACKSYNC + '/folder'
+        url = URL_BASIC + '/folder'
+        if parent_id == 0:
+            parameters = {"name": str(name)}
         else:
-            url = URL_NEC + '/folder'
-        parameters = {"name": str(name)}
+            parameters = {"name": str(name), "parent": parent_id}
         r = requests.post(url, json.dumps(parameters), headers=headers, auth=oauth)
         return r
     else:
-        if is_ss_provider:
-            url = URL_STACKSYNC + '/file?name=' + str(name) + "&parent=" + str(parent_id)
+        if parent_id == 0:
+            url = URL_BASIC + '/file?name=' + str(name)
         else:
-            url = URL_NEC + '/file?name=' + str(name) + "&parent=" + str(parent_id)
+            url = URL_BASIC + '/file?name=' + str(name) + "&parent=" + str(parent_id)
         r = requests.post(url, headers=headers, auth=oauth)
         return r
 
 
 def unlink(oauth, item_id, is_folder=False, is_ss_provider=True):
     headers = {}
-    if is_folder:
-        if is_ss_provider:
-            url = URL_STACKSYNC + '/folder/' + str(item_id)
-        else:
-            url = URL_NEC + '/folder/' + str(item_id)
+    if is_ss_provider:
+        URL_BASIC = URL_STACKSYNC
     else:
-        if is_ss_provider:
-            url = URL_STACKSYNC + '/file/' + str(item_id)
-        else:
-            url = URL_NEC + '/file/' + str(item_id)
+        URL_BASIC = URL_NEC
+
+    if is_folder:
+        url = URL_BASIC + '/folder/' + str(item_id)
+    else:
+        url = URL_BASIC + '/file/' + str(item_id)
 
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
@@ -105,18 +119,18 @@ def unlink(oauth, item_id, is_folder=False, is_ss_provider=True):
     return r
 
 
+# TODO: Problems with move over two distinct providers?
 def move(oauth, item_id, new_parent=0, is_folder=False, is_ss_provider=True):
     headers = {}
-    if is_folder:
-        if is_ss_provider:
-            url = URL_STACKSYNC + '/folder/' + str(item_id)
-        else:
-            url = URL_NEC + '/folder/' + str(item_id)
+    if is_ss_provider:
+        URL_BASIC = URL_STACKSYNC
     else:
-        if is_ss_provider:
-            url = URL_STACKSYNC + '/file/' + str(item_id)
-        else:
-            url = URL_NEC + '/file/' + str(item_id)
+        URL_BASIC = URL_NEC
+
+    if is_folder:
+        url = URL_BASIC + '/folder/' + str(item_id)
+    else:
+        url = URL_BASIC + '/file/' + str(item_id)
 
     parameters = {"parent": str(new_parent)}
 
@@ -201,7 +215,7 @@ if __name__ == "__main__":
         elif response.status_code == 400 and (
                         "This name is already used in the same folder. Please use a different one." in response.text or
                         "Folder already exists." in response.text):
-            response = list_root_content(oauth)
+            response = list_content(oauth)
             json_data = response.json()
             content_root = json_data["contents"]
             for line in content_root:
