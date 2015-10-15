@@ -12,16 +12,27 @@ import urlparse
 from requests_oauthlib import OAuth1, OAuth1Session
 
 # TODO: Take parameters from a config file
-ip = "localhost"
-URL_STACKSYNC = 'http://%s:8080/v1' % (ip)
-STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://%s:8080/oauth/request_token" % (ip)
-STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://%s:8080/oauth/access_token" % (ip)
-STACKSYNC_AUTHORIZE_ENDPOINT = "http://%s:8080/oauth/authorize" % (ip)
+ip_ss = "localhost"
+ip_nec = "localhost"
+
+URL_STACKSYNC = 'http://%s/v1' % (ip_ss)
+STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://%s/oauth/request_token" % (ip_ss)
+STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://%s/oauth/access_token" % (ip_ss)
+STACKSYNC_AUTHORIZE_ENDPOINT = "http://%s/oauth/authorize" % (ip_ss)
+
+URL_NEC = 'http://%s' % (ip_nec)
+NEC_REQUEST_TOKEN_ENDPOINT = "http://%s/api/cloudspaces/oauth/request_token" % (ip_nec)
+NEC_ACCESS_TOKEN_ENDPOINT = "http://%s/api/cloudspaces/oauth/access_token" % (ip_nec)
+NEC_AUTHORIZE_ENDPOINT = "http://%s/oauth/api/cloudspaces/authorize" % (ip_nec)
 
 
-def put_content(oauth, file_id, file_path):
+def put_content(oauth, file_id, file_path, is_ss_provider):
     headers = {}
-    url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
+    if is_ss_provider:
+        url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
+    else:
+        url = URL_NEC + '/file/' + str(file_id) + '/data'
+
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
     with open(file_path, "r") as myfile:
@@ -30,9 +41,13 @@ def put_content(oauth, file_id, file_path):
     return r
 
 
-def get_content(oauth, file_id):
+def get_content(oauth, file_id, is_ss_provider=True):
     headers = {}
-    url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
+    if is_ss_provider:
+        url = URL_STACKSYNC + '/file/' + str(file_id) + '/data'
+    else:
+        url = URL_NEC + '/file/' + str(file_id) + '/data'
+
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     r = requests.get(url, headers=headers, auth=oauth)
@@ -47,30 +62,42 @@ def list_root_content(oauth):
     r = requests.get(url, headers=headers, auth=oauth)
     return r
 
-
-def make(oauth, name, is_folder=False):
+# TODO
+def make(oauth, name, parent_id=0, is_folder=False, is_ss_provider=True):
     headers = {}
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
     if not name:
         raise ValueError("Can not create a folder without name")
     if is_folder:
-        url = URL_STACKSYNC + '/folder'
+        if is_ss_provider:
+            url = URL_STACKSYNC + '/folder'
+        else:
+            url = URL_NEC + '/folder'
         parameters = {"name": str(name)}
         r = requests.post(url, json.dumps(parameters), headers=headers, auth=oauth)
         return r
     else:
-        url = URL_STACKSYNC + '/file?name=' + str(name)
+        if is_ss_provider:
+            url = URL_STACKSYNC + '/file?name=' + str(name) + "&parent=" + str(parent_id)
+        else:
+            url = URL_NEC + '/file?name=' + str(name) + "&parent=" + str(parent_id)
         r = requests.post(url, headers=headers, auth=oauth)
         return r
 
 
-def unlink(oauth, item_id, is_folder=False):
+def unlink(oauth, item_id, is_folder=False, is_ss_provider=True):
     headers = {}
     if is_folder:
-        url = URL_STACKSYNC + '/folder/' + str(item_id)
+        if is_ss_provider:
+            url = URL_STACKSYNC + '/folder/' + str(item_id)
+        else:
+            url = URL_NEC + '/folder/' + str(item_id)
     else:
-        url = URL_STACKSYNC + '/file/' + str(item_id)
+        if is_ss_provider:
+            url = URL_STACKSYNC + '/file/' + str(item_id)
+        else:
+            url = URL_NEC + '/file/' + str(item_id)
 
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "text/plain"
@@ -78,14 +105,19 @@ def unlink(oauth, item_id, is_folder=False):
     return r
 
 
-def move(oauth, item_id, is_folder=False):
+def move(oauth, item_id, new_parent=0, is_folder=False, is_ss_provider=True):
     headers = {}
     if is_folder:
-        url = URL_STACKSYNC + '/folder/' + str(item_id)
+        if is_ss_provider:
+            url = URL_STACKSYNC + '/folder/' + str(item_id)
+        else:
+            url = URL_NEC + '/folder/' + str(item_id)
     else:
-        url = URL_STACKSYNC + '/file/' + str(item_id)
+        if is_ss_provider:
+            url = URL_STACKSYNC + '/file/' + str(item_id)
+        else:
+            url = URL_NEC + '/file/' + str(item_id)
 
-    new_parent = 0
     parameters = {"parent": str(new_parent)}
 
     headers['StackSync-API'] = "v2"
@@ -137,3 +169,55 @@ def authenticate_request(useremail, password, client_key, client_secret):
         return resource_owner_key, resource_owner_secret
 
     raise ValueError("Error in the authenticate process 3")
+
+
+def share(oauth, folder_id, friend_mail):
+    headers = {}
+    url = URL_STACKSYNC + "/folder/" + str(folder_id) + "/share"
+
+    headers["StackSync-API"] = "v2"
+    headers["Content-Type"] = "application/json"
+
+    shared_to = friend_mail.split(",")
+    r = requests.post(url, json.dumps(shared_to), headers=headers, auth=oauth)
+    # return 201 if tot ok, nothing to parse of response
+    return r
+
+
+if __name__ == "__main__":
+    argv_list = sys.argv
+    if argv_list[1] == "auth":
+        print authenticate_request(argv_list[2], argv_list[3], argv_list[4], argv_list[5])
+    elif argv_list[1] == "make_shared":
+        oauth = OAuth1(argv_list[4],
+                       client_secret=argv_list[5],
+                       resource_owner_key=argv_list[2],
+                       resource_owner_secret=argv_list[3])
+        folder_name = "shared"
+        response = make(oauth, folder_name, is_folder=True)
+        if response.status_code == 201:
+            json_data = json.loads(response.text)
+            server_id = int(json_data["id"])
+        elif response.status_code == 400 and (
+                        "This name is already used in the same folder. Please use a different one." in response.text or
+                        "Folder already exists." in response.text):
+            response = list_root_content(oauth)
+            json_data = response.json()
+            content_root = json_data["contents"]
+            for line in content_root:
+                try:
+                    name = line["filename"]
+                    is_folder = line["is_folder"]
+                    if name == folder_name and is_folder:
+                        server_id = line["id"]
+                        break
+                except KeyError:
+                    pass
+        print server_id
+    elif argv_list[1] == "share":
+        oauth = OAuth1(argv_list[6],
+                       client_secret=argv_list[7],
+                       resource_owner_key=argv_list[4],
+                       resource_owner_secret=argv_list[5])
+        response = share(oauth, argv_list[2], argv_list[3])
+        print response.status_code, response.text

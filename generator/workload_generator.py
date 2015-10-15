@@ -1,8 +1,11 @@
 # encoding: utf-8
+from collections import defaultdict
 import sys
 from API_manager import *
 from requests_oauthlib import OAuth1
-from trace_processor import thread_trace_processor
+from trace_processor import thread_trace_processor, User
+from random import random
+from decimal import *
 
 user_oauth = dict()
 
@@ -11,8 +14,7 @@ threads_pool = []
 CLIENT_KEY = "b3af4e669daf880fb16563e6f36051b105188d413"
 CLIENT_SECRET = "c168e65c18d75b35d8999b534a3776cf"
 
-user_oauth = dict()
-
+users_dict = dict()
 
 def print_seq_dots():
     sys.stdout.write('.')
@@ -22,26 +24,46 @@ def print_seq_dots():
 def create_test_user():
     oauth = OAuth1(CLIENT_KEY,
                    client_secret=CLIENT_SECRET,
-                   resource_owner_key='wv3EZhts6cy8gy2QmaZMhtbgGHKB2l',
-                   resource_owner_secret='nc1DcqKaWVSlcknXNzlRYWAQ2RPZFq')
+                   resource_owner_key='sMuUlMeptCOHmXoefADVZQFSG9HOQH',
+                   resource_owner_secret='yGtFhGjKnSYLfoBLDjinW40UyrImn8')
     user_oauth[0] = oauth
 
 
-def create_users(user_file):
+def read_users(user_file):
     # TODO: Make proper authentication
+    #user_id,owner_key,owner_secret,shared_folder_id,provider,friends_num,user2,factor2,user3,factor3,...
     with open(user_file, "r") as fp:
-        for user_id in fp:
-            oauth = OAuth1(CLIENT_KEY,
+        for i, line in enumerate(fp):
+            if i > 1:
+                array_line = line.rstrip('\n').split(",")
+
+                user_id = int(array_line[0])
+                owner_key = str(array_line[1])
+                owner_secret = str(array_line[2])
+                shared_folder_id = int(array_line[3])
+                provider = str(array_line[4])
+                friends_num = int(array_line[5])
+                list_size = len(array_line)
+
+                friends_dict = dict()
+                for j in range(6, list_size, 2):
+                    friend_id = int(array_line[j])
+                    friend_factor = Decimal(str(array_line[j+1]))
+                    friends_dict[friend_id] = friend_factor
+
+                oauth = OAuth1(CLIENT_KEY,
                            client_secret=CLIENT_SECRET,
-                           resource_owner_key='wv3EZhts6cy8gy2QmaZMhtbgGHKB2l',
-                           resource_owner_secret='nc1DcqKaWVSlcknXNzlRYWAQ2RPZFq')
-            user_oauth[int(user_id)] = oauth
+                           resource_owner_key=owner_key,
+                           resource_owner_secret=owner_secret)
+
+                user = User(user_id, oauth, shared_folder_id, provider, friends_dict)
+                users_dict[user_id] = user
 
 
 def run_threads_experiment(num_threads, file_trace_path):
     print "\nStarting experiment with %d threads" % (num_threads)
     for i in range(0, num_threads):
-        t = thread_trace_processor(user_oauth, i, num_threads, file_trace_path)
+        t = thread_trace_processor(i, num_threads, file_trace_path, users_dict)
         t.setDaemon(True)
         threads_pool.append(t)
         t.start()
@@ -126,6 +148,7 @@ if __name__ == "__main__":
     script_path = __file__[:__file__.rfind("/")]
     file_users_path = script_path + "/../traces/test_users.csv"
     file_trace_path = script_path + "/../traces/test_ops.csv"
+    print __file__
     try:
         argv_list = sys.argv
 
@@ -134,7 +157,7 @@ if __name__ == "__main__":
         else:
             try:
                 num_threads = int(argv_list[1])
-                create_users(file_users_path)
+                read_users(file_users_path)
                 run_threads_experiment(num_threads, file_trace_path)
                 wait_experiment()
             except ValueError:
@@ -143,6 +166,7 @@ if __name__ == "__main__":
                 elif argv_list[1] == "list":
                     create_test_user()
                     response = list_root_content(user_oauth[0])
+                    print response.text
                     json_data = response.json()
                     content_root = json_data["contents"]
                     for line in content_root:
@@ -156,9 +180,12 @@ if __name__ == "__main__":
                             pass
                 elif argv_list[1] == "test":
                     test_api()
+                elif argv_list[1] == "interop":
+                    read_users(script_path)
                 else:
                     print "ERROR: Option %s is not permitted" % (argv_list[1])
                     print_usage()
 
     except (KeyboardInterrupt, SystemExit):
         print ("\nExperiment killed")
+
