@@ -82,14 +82,20 @@ class ThreadTraceProcessor(threading.Thread):
         self.trace_path = p_trace_path
 
     def run(self):
-        self.load_initial_environment()
+        self.load_initial_parameters()
         self.event_dispatcher()
 
-    def load_initial_environment(self):
+    def load_initial_parameters(self):
         for user_id in self.users_dict:
             user = self.users_dict[user_id]
             self.workspace_folders[user.shared_folder_id] = user.shared_folder_id
             self.workspace_files[user.shared_folder_id] = user.file0_id
+            user_provider = user.provider
+
+            for friend_id in user.friends_id_factor_dict:
+                friend = self.users_dict[friend_id]
+                if user_provider == friend.provider and user_provider == "SS":
+                    user.workspaces_oauth[friend.shared_folder_id] = user.oauth
 
     def event_dispatcher(self):
         previous_normalized_timestamp = 0
@@ -97,7 +103,7 @@ class ThreadTraceProcessor(threading.Thread):
             for line in fp:
                 event = line.rstrip("\n").split(",")
                 t_sleep = int(event[self.csv_normalized_timestamp]) - previous_normalized_timestamp
-                t_sleep = int(t_sleep/1000)
+                t_sleep = int(t_sleep / 1000)
                 time.sleep(t_sleep)
                 previous_normalized_timestamp = int(event[self.csv_normalized_timestamp])
                 user_id = int(event[self.csv_user_id])

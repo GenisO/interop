@@ -149,12 +149,12 @@ def initialize_scenario(credentials_path, scenario_path):
                     else:
                         raise ValueError("Error with folder initialization")
 
-                    response = make(oauth, "file0.txt", is_folder=False, is_ss_provider=is_ss)
+                    response = make(oauth, "file0.txt", parent_id=folder_id, is_folder=False, is_ss_provider=is_ss)
                     if response.status_code == 201:
                         json_data = json.loads(response.text)
                         file_id = int(json_data["id"])
                     elif response.status_code == 400 and "This name is already used in the same folder. Please use a different one." in response.text:
-                        response = list_content(oauth, is_ss_provider=is_ss)
+                        response = list_content(oauth, parent_id=folder_id, is_ss_provider=is_ss)
                         json_data = response.json()
                         content_root = json_data["contents"]
                         file_id = None
@@ -259,10 +259,9 @@ if __name__ == "__main__":
         # translate_nec_to_u1(script_path)
         # load_interop_users(script_path)
 
-
-
+        # Correct steps
         # retrieve_credentials(users_path, credentials_path, True)
-        # initialize_scenario(credentials_path, data_path)
+        initialize_scenario(credentials_path, data_path)
         process_friendship(data_path, relations_path, final_path)
     except (KeyboardInterrupt, SystemExit):
         print ("\nExperiment killed")

@@ -57,14 +57,14 @@ def get_content(oauth, file_id, is_ss_provider=True):
     return r
 
 
-def list_content(oauth, parent=0, is_ss_provider=True):
+def list_content(oauth, parent_id=0, is_ss_provider=True):
     headers = {}
     if is_ss_provider:
         URL_BASIC = URL_STACKSYNC
     else:
         URL_BASIC = URL_NEC
 
-    url = URL_BASIC + '/folder/' + str(parent) + "/contents"
+    url = URL_BASIC + '/folder/' + str(parent_id) + "/contents"
 
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"

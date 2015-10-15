@@ -24,9 +24,9 @@ def print_seq_dots():
 
 def create_test_user():
     oauth = OAuth1(CLIENT_KEY,
-                        client_secret=CLIENT_SECRET,
-                        resource_owner_key="dfc8aff1-4e7a-4229-abd0-3e23c287200a",
-                        resource_owner_secret="efc136e7-e184-4ac0-ad90-88235012c9bf")
+                   client_secret=CLIENT_SECRET,
+                   resource_owner_key="dfc8aff1-4e7a-4229-abd0-3e23c287200a",
+                   resource_owner_secret="efc136e7-e184-4ac0-ad90-88235012c9bf")
     user_oauth[0] = oauth
 
 
@@ -81,28 +81,32 @@ def wait_experiment():
     print ("\nExperiment has finished")
 
 
-def clean_environment():
+def clean_environment(users_path):
     print "\nCleaning environment"
-    create_test_user()
-    response = list_content(user_oauth[0])
-    json_data = response.json()
-    content_root = json_data["contents"]
-    for line in content_root:
-        try:
-            print_seq_dots()
-            name = line["filename"]
-            server_id = line["id"]
-            is_folder = line["is_folder"]
-            if name.isdigit():
-                response = unlink(user_oauth[0], server_id, is_folder)
-        except KeyError:
-            pass
-    print
+    read_users_info(users_path)
+
+    for user_id in users_dict:
+        user = users_dict[user_id]
+        is_ss_provider = user.provider == "SS"
+        response = list_content(user.oauth, user.shared_folder_id, is_ss_provider)
+        json_data = response.json()
+        content_root = json_data["contents"]
+
+        for line in content_root:
+            try:
+                print_seq_dots()
+                name = line["filename"]
+                server_id = line["id"]
+                is_folder = line["is_folder"]
+                if name.isdigit():
+                    unlink(user.oauth, server_id, is_folder, is_ss_provider)
+            except KeyError:
+                pass
 
 
 def test_api(path):
     create_test_user()
-    #shared_ss dir -> server_id = 9472
+    # shared_ss dir -> server_id = 9472
     print "MAKE"
     response = make(user_oauth[0], "151548", parent_id=9472, is_folder=False, is_ss_provider=False)
     print response
@@ -114,7 +118,7 @@ def test_api(path):
     server_id = json_data["id"]
     print server_id
 
-    file_path = path +"/../README.md"
+    file_path = path + "/../README.md"
     print "PUT"
     response = put_content(user_oauth[0], server_id, file_path, is_ss_provider=False)
     print response
@@ -165,11 +169,11 @@ if __name__ == "__main__":
                 wait_experiment()
             except ValueError:
                 if argv_list[1] == "clean":
-                    clean_environment()
+                    clean_environment(file_users_path)
                 elif argv_list[1] == "list":
                     create_test_user()
                     folder_id = raw_input("Folder id: ")
-                    response = list_content(user_oauth[0], parent=folder_id, is_ss_provider=False)
+                    response = list_content(user_oauth[0], parent_id=folder_id, is_ss_provider=False)
                     print response.text
                     json_data = response.json()
                     content_root = json_data["contents"]
