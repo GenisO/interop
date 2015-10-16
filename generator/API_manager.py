@@ -11,19 +11,15 @@ from urlparse import parse_qs
 import urlparse
 from requests_oauthlib import OAuth1, OAuth1Session
 
+CLIENT_KEY = "b3af4e669daf880fb16563e6f36051b105188d413"
+CLIENT_SECRET = "c168e65c18d75b35d8999b534a3776cf"
+
 # TODO: Take parameters from a config file
 ip_ss = "localhost"
 ip_nec = "localhost"
 
 URL_STACKSYNC = 'http://%s/v1' % (ip_ss)
-STACKSYNC_REQUEST_TOKEN_ENDPOINT = "http://%s/oauth/request_token" % (ip_ss)
-STACKSYNC_ACCESS_TOKEN_ENDPOINT = "http://%s/oauth/access_token" % (ip_ss)
-STACKSYNC_AUTHORIZE_ENDPOINT = "http://%s/oauth/authorize" % (ip_ss)
-
 URL_NEC = 'http://%s' % (ip_nec)
-NEC_REQUEST_TOKEN_ENDPOINT = "http://%s/api/cloudspaces/oauth/request_token" % (ip_nec)
-NEC_ACCESS_TOKEN_ENDPOINT = "http://%s/api/cloudspaces/oauth/access_token" % (ip_nec)
-NEC_AUTHORIZE_ENDPOINT = "http://%s/oauth/api/cloudspaces/authorize" % (ip_nec)
 
 
 def put_content(oauth, file_id, file_path, is_ss_provider):
@@ -79,8 +75,10 @@ def make(oauth, name, parent_id=0, is_folder=False, is_ss_provider=True):
 
     if is_ss_provider:
         URL_BASIC = URL_STACKSYNC
+        data = None
     else:
         URL_BASIC = URL_NEC
+        data = ""
 
     if not name:
         raise ValueError("Can not create a folder without name")
@@ -97,7 +95,7 @@ def make(oauth, name, parent_id=0, is_folder=False, is_ss_provider=True):
             url = URL_BASIC + '/file?name=' + str(name)
         else:
             url = URL_BASIC + '/file?name=' + str(name) + "&parent=" + str(parent_id)
-        r = requests.post(url, headers=headers, auth=oauth)
+        r = requests.post(url, data=data, headers=headers, auth=oauth)
         return r
 
 
@@ -140,11 +138,20 @@ def move(oauth, item_id, new_parent=0, is_folder=False, is_ss_provider=True):
     return r
 
 
-def authenticate_request(useremail, password, client_key, client_secret):
+def authenticate_request(useremail, password, client_key, client_secret, is_ss_provider=True):
+    if is_ss_provider:
+        REQUEST_TOKEN_ENDPOINT = "http://%s/oauth/request_token" % (ip_ss)
+        ACCESS_TOKEN_ENDPOINT = "http://%s/oauth/access_token" % (ip_ss)
+        AUTHORIZE_ENDPOINT = "http://%s/oauth/authorize" % (ip_ss)
+    else:
+        REQUEST_TOKEN_ENDPOINT = "http://%s/api/cloudspaces/oauth/request_token" % (ip_nec)
+        ACCESS_TOKEN_ENDPOINT = "http://%s/api/cloudspaces/oauth/access_token" % (ip_nec)
+        AUTHORIZE_ENDPOINT = "http://%s/api/cloudspaces/oauth/authorize" % (ip_nec)
+
     oauth = OAuth1(client_key=client_key, client_secret=client_secret, callback_uri='oob')
     headers = {"STACKSYNC_API": "v2"}
     try:
-        r = requests.post(url=STACKSYNC_REQUEST_TOKEN_ENDPOINT, auth=oauth, headers=headers, verify=False)
+        r = requests.post(url=REQUEST_TOKEN_ENDPOINT, auth=oauth, headers=headers, verify=False)
         if r.status_code != 200:
             raise ValueError("Error in the authenticate process")
     except:
@@ -154,7 +161,7 @@ def authenticate_request(useremail, password, client_key, client_secret):
     resource_owner_key = credentials.get('oauth_token')[0]
     resource_owner_secret = credentials.get('oauth_token_secret')[0]
 
-    authorize_url = STACKSYNC_AUTHORIZE_ENDPOINT + '?oauth_token=' + resource_owner_key
+    authorize_url = AUTHORIZE_ENDPOINT + '?oauth_token=' + resource_owner_key
 
     params = urllib.urlencode({'email': useremail, 'password': password, 'permission': 'allow'})
     headers = {"Content-Type": "application/x-www-form-urlencoded", "STACKSYNC_API": "v2"}
@@ -173,7 +180,7 @@ def authenticate_request(useremail, password, client_key, client_secret):
                         verifier=verifier,
                         callback_uri='oob')
         try:
-            r = requests.post(url=STACKSYNC_ACCESS_TOKEN_ENDPOINT, auth=oauth2, headers=headers, verify=False)
+            r = requests.post(url=ACCESS_TOKEN_ENDPOINT, auth=oauth2, headers=headers, verify=False)
         except:
             raise ValueError("Error in the authenticate process 2")
         credentials = parse_qs(r.content)

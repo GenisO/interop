@@ -11,9 +11,6 @@ user_oauth = dict()
 
 threads_pool = []
 
-CLIENT_KEY = "b3af4e669daf880fb16563e6f36051b105188d413"
-CLIENT_SECRET = "c168e65c18d75b35d8999b534a3776cf"
-
 users_dict = dict()
 
 
@@ -37,28 +34,29 @@ def read_users_info(user_file):
             if i > 0:
                 array_line = line.rstrip('\n').split(",")
 
-                user_id = int(array_line[0])
-                owner_key = str(array_line[1])
-                owner_secret = str(array_line[2])
-                provider = str(array_line[3])
-                shared_folder_id = int(array_line[4])
-                file0_id = int(array_line[5])
-                friends_num = int(array_line[6])
-                list_size = len(array_line)
+                if array_line[0] != "":
+                    user_id = int(array_line[0])
+                    owner_key = str(array_line[1])
+                    owner_secret = str(array_line[2])
+                    provider = str(array_line[3])
+                    shared_folder_id = str(array_line[4])
+                    file0_id = str(array_line[5])
+                    friends_num = int(array_line[6])
+                    list_size = len(array_line)
 
-                friends_dict = dict()
-                for j in range(7, list_size, 2):
-                    friend_id = int(array_line[j])
-                    friend_factor = Decimal(str(array_line[j + 1]))
-                    friends_dict[friend_id] = friend_factor
+                    friends_dict = dict()
+                    for j in range(7, list_size, 2):
+                        friend_id = int(array_line[j])
+                        friend_factor = Decimal(str(array_line[j + 1]))
+                        friends_dict[friend_id] = friend_factor
 
-                oauth = OAuth1(CLIENT_KEY,
-                               client_secret=CLIENT_SECRET,
-                               resource_owner_key=owner_key,
-                               resource_owner_secret=owner_secret)
-                # User(user_id, oauth, shared_folder_id, provider, friends_id_factor_dict=dict(), file0_id=None)
-                user = User(user_id, oauth, shared_folder_id, provider, friends_dict, file0_id)
-                users_dict[user_id] = user
+                    oauth = OAuth1(CLIENT_KEY,
+                                   client_secret=CLIENT_SECRET,
+                                   resource_owner_key=owner_key,
+                                   resource_owner_secret=owner_secret)
+                    # User(user_id, oauth, shared_folder_id, provider, friends_id_factor_dict=dict(), file0_id=None)
+                    user = User(user_id, oauth, shared_folder_id, provider, friends_dict, file0_id)
+                    users_dict[user_id] = user
 
 
 def run_threads_experiment(num_threads, file_trace_path):
@@ -102,7 +100,7 @@ def clean_environment(users_path):
                     unlink(user.oauth, server_id, is_folder, is_ss_provider)
             except KeyError:
                 pass
-
+        unlink(user.oauth, user.shared_folder_id, True, is_ss_provider)
 
 def test_api(path):
     create_test_user()
@@ -153,8 +151,8 @@ def print_usage():
 
 if __name__ == "__main__":
     script_path = __file__[:__file__.rfind("/")]
-    file_users_path = script_path + "/../target/ast3_full_interop_info.csv"
-    file_trace_path = script_path + "/../target/ast3_ops.csv"
+    file_users_path = script_path + "/../target/mini_test_workload_generator_info.csv"
+    file_trace_path = script_path + "/../target/mini_test_ops.csv"
     print __file__
     try:
         argv_list = sys.argv
