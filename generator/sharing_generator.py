@@ -99,7 +99,8 @@ def retrieve_credentials(users_path, credentials_path, is_ss_provider):
                     user_id = line.rstrip('\n')
                     if user_id != "":
                         user_email = user_id + email
-                        [owner_key, owner_secret] = authenticate_request(user_email, user_id, CLIENT_KEY, CLIENT_SECRET, is_ss_provider)
+                        [owner_key, owner_secret] = authenticate_request(user_email, user_id, CLIENT_KEY, CLIENT_SECRET,
+                                                                         is_ss_provider)
                         sentence = "%s,%s,%s,%s\n" % (user_id, owner_key, owner_secret, provider)
                         fw.write(sentence)
 
@@ -134,7 +135,8 @@ def initialize_scenario(credentials_path, scenario_path):
                     if response.status_code == 201:
                         json_data = json.loads(response.text)
                         folder_id = str(json_data["id"])
-                    elif (response.status_code == 400 or response.status_code == 403) and "Folder already exist" in response.text:
+                    elif (
+                            response.status_code == 400 or response.status_code == 403) and "Folder already exist" in response.text:
                         response = list_content(oauth, parent_id=parent_id, is_ss_provider=is_ss)
                         json_data = response.json()
                         content_root = json_data["contents"]
@@ -157,7 +159,7 @@ def initialize_scenario(credentials_path, scenario_path):
                     if response.status_code == 201:
                         json_data = json.loads(response.text)
                         file_id = str(json_data["id"])
-                    elif (response.status_code == 400 or response.status_code == 403) and\
+                    elif (response.status_code == 400 or response.status_code == 403) and \
                             ("This name is already used in the same folder. Please use a different one."
                              in response.text or "File already exist" in response.text):
                         response = list_content(oauth, parent_id=folder_id, is_ss_provider=is_ss)
@@ -298,7 +300,7 @@ def users_table(nec_path, ss_path, relations_path, table_path):
             for user_id in relation_dict:
                 friends_list = ""
                 for friend_email in relation_dict[user_id]:
-                   friends_list += ", %s" % (friend_email)
+                    friends_list += ", %s" % (friend_email)
 
                 if user_id in ss_users:
                     line = "%s@stacksync.org, %s%s\n" % (user_id, user_id, friends_list)
@@ -306,7 +308,6 @@ def users_table(nec_path, ss_path, relations_path, table_path):
                 else:
                     line = "%s@nec.com, %s%s\n" % (user_id, user_id, friends_list)
                     fnec.write(line)
-
 
 
 if __name__ == "__main__":

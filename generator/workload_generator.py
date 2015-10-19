@@ -1,10 +1,7 @@
 # encoding: utf-8
-from collections import defaultdict
-import sys
 from API_manager import *
 from requests_oauthlib import OAuth1
 from trace_processor import ThreadTraceProcessor, User
-from random import random
 from decimal import *
 
 user_oauth = dict()
@@ -62,7 +59,7 @@ def read_users_info(user_file):
 def run_threads_experiment(num_threads, file_trace_path):
     print "\nStarting experiment with %d threads" % (num_threads)
     for i in range(0, num_threads):
-        t = ThreadTraceProcessor(i, num_threads, file_trace_path, users_dict)
+        t = ThreadTraceProcessor(i, num_threads, file_trace_path)
         t.setDaemon(False)
         threads_pool.append(t)
         t.start()
@@ -100,7 +97,7 @@ def clean_environment(users_path):
                     unlink(user.oauth, server_id, is_folder, is_ss_provider)
             except KeyError:
                 pass
-        unlink(user.oauth, user.shared_folder_id, True, is_ss_provider)
+
 
 def test_api(path):
     create_test_user()
