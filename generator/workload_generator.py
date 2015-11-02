@@ -1,4 +1,5 @@
 # encoding: utf-8
+import time
 from API_manager import *
 from requests_oauthlib import OAuth1
 from trace_processor import ThreadTraceProcessor, User
@@ -17,10 +18,11 @@ def print_seq_dots():
 
 
 def create_test_user():
+    # 3585146880,SS,39780,39795
     oauth = OAuth1(CLIENT_KEY,
                    client_secret=CLIENT_SECRET,
-                   resource_owner_key="dfc8aff1-4e7a-4229-abd0-3e23c287200a",
-                   resource_owner_secret="efc136e7-e184-4ac0-ad90-88235012c9bf")
+                   resource_owner_key="VABWlXtTGLnjsE4rLRCIGsse1d2Tie",
+                   resource_owner_secret="YYuFVJIPsOqcoQ8QXGkWRTv3M4ZGJs")
     user_oauth[0] = oauth
 
 
@@ -60,7 +62,7 @@ def run_threads_experiment(num_threads, file_trace_path):
     print "\nStarting experiment with %d threads" % (num_threads)
     for i in range(0, num_threads):
         t = ThreadTraceProcessor(i, num_threads, file_trace_path)
-        t.setDaemon(False)
+        t.setDaemon(True)
         threads_pool.append(t)
         t.start()
 
@@ -80,13 +82,13 @@ def clean_environment(users_path):
     print "\nCleaning environment"
     read_users_info(users_path)
 
-    for user_id in users_dict:
+    for i, user_id in enumerate(users_dict):
         user = users_dict[user_id]
         is_ss_provider = user.provider == "SS"
         response = list_content(user.oauth, user.shared_folder_id, is_ss_provider)
         json_data = response.json()
         content_root = json_data["contents"]
-
+        print i, " ", user_id
         for line in content_root:
             try:
                 print_seq_dots()
@@ -94,16 +96,23 @@ def clean_environment(users_path):
                 server_id = line["id"]
                 is_folder = line["is_folder"]
                 if name.isdigit():
-                    unlink(user.oauth, server_id, is_folder, is_ss_provider)
+                    response = unlink(user.oauth, server_id, is_folder, is_ss_provider)
+                    if response.status_code != 200:
+                        print response, response.text, response.content
             except KeyError:
                 pass
+        print
 
 
 def test_api(path):
     create_test_user()
     # shared_ss dir -> server_id = 9472
+    is_ss_provider = True
     print "MAKE"
-    response = make(user_oauth[0], "151548", parent_id=9472, is_folder=False, is_ss_provider=False)
+    start = time.time()
+    response = make(user_oauth[0], "151548", parent_id=39780, is_folder=False, is_ss_provider=is_ss_provider)
+    end = time.time()
+    print "MAKE file", int(end-start)
     print response
     print response.headers
     print response.text
@@ -115,12 +124,12 @@ def test_api(path):
 
     file_path = path + "/../README.md"
     print "PUT"
-    response = put_content(user_oauth[0], server_id, file_path, is_ss_provider=False)
+    response = put_content(user_oauth[0], server_id, file_path, is_ss_provider=is_ss_provider)
     print response
     print response.text
 
     print "GET"
-    response = get_content(user_oauth[0], server_id, is_ss_provider=False)
+    response = get_content(user_oauth[0], server_id, is_ss_provider=is_ss_provider)
     print response
     print response.headers
     print response.text
@@ -148,8 +157,9 @@ def print_usage():
 
 if __name__ == "__main__":
     script_path = __file__[:__file__.rfind("/")]
-    file_users_path = script_path + "/../target/mini_test_workload_generator_info.csv"
-    file_trace_path = script_path + "/../target/mini_test_ops.csv"
+    # file_users_path = script_path + "/../target/cpd/ss_full_interop_info.csv"
+    file_users_path = script_path + "/../target/cpd/users_full_interop_info.csv"
+    file_trace_path = script_path + "/../traces/interop_ops_without_moves.csv"
     print __file__
     try:
         argv_list = sys.argv
@@ -158,6 +168,7 @@ if __name__ == "__main__":
             print_usage()
         else:
             try:
+                # Run experiment
                 num_threads = int(argv_list[1])
                 read_users_info(file_users_path)
                 run_threads_experiment(num_threads, file_trace_path)

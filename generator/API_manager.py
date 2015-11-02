@@ -1,15 +1,12 @@
 # encoding: utf-8
 from __future__ import unicode_literals
-import sys, os
-import unittest
-import urllib2
+import sys
 
 import requests
 import json
 import urllib
 from urlparse import parse_qs
-import urlparse
-from requests_oauthlib import OAuth1, OAuth1Session
+from requests_oauthlib import OAuth1
 
 CLIENT_KEY = "b3af4e669daf880fb16563e6f36051b105188d413"
 CLIENT_SECRET = "c168e65c18d75b35d8999b534a3776cf"
@@ -73,12 +70,12 @@ def make(oauth, name, parent_id=0, is_folder=False, is_ss_provider=True):
     headers['StackSync-API'] = "v2"
     headers['Content-Type'] = "application/json"
 
+    data = "0\n"
+
     if is_ss_provider:
         URL_BASIC = URL_STACKSYNC
-        data = None
     else:
         URL_BASIC = URL_NEC
-        data = ""
 
     if not name:
         raise ValueError("Can not create a folder without name")

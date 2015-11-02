@@ -99,10 +99,13 @@ def retrieve_credentials(users_path, credentials_path, is_ss_provider):
                     user_id = line.rstrip('\n')
                     if user_id != "":
                         user_email = user_id + email
-                        [owner_key, owner_secret] = authenticate_request(user_email, user_id, CLIENT_KEY, CLIENT_SECRET,
-                                                                         is_ss_provider)
-                        sentence = "%s,%s,%s,%s\n" % (user_id, owner_key, owner_secret, provider)
-                        fw.write(sentence)
+                        try:
+                            [owner_key, owner_secret] = authenticate_request(user_email, user_id, CLIENT_KEY, CLIENT_SECRET,
+                                                                             is_ss_provider)
+                            sentence = "%s,%s,%s,%s\n" % (user_id, owner_key, owner_secret, provider)
+                            fw.write(sentence)
+                        except ValueError:
+                            print user_id, user_email
 
 
 def initialize_scenario(credentials_path, scenario_path):
@@ -112,76 +115,117 @@ def initialize_scenario(credentials_path, scenario_path):
         # user_id, owner_key, owner_secret, provider
         with open(credentials_path, "r") as fp:
             for i, line in enumerate(fp):
+                fw.write("[DEBUG] %s line %d\n" % (str(time.time()), i))
+                print ("[DEBUG] %s line %d\n" % (str(time.time()), i))
                 if i > 0:
-                    line = line.rstrip('\n').split(",")
-                    user_id = line[0]
-                    owner_key = line[1]
-                    owner_secret = line[2]
-                    provider = line[3]
-                    is_ss = provider == "SS"
+                    try:
+                        line = line.rstrip('\r\n').split(",")
+                        if len(line) == 4:
+                            user_id = line[1]
+                            owner_key = line[2]
+                            owner_secret = line[3]
+                            # provider = line[3]
+                            provider = "NEC"
+                            is_ss = provider == "SS"
 
-                    oauth = OAuth1(CLIENT_KEY,
-                                   client_secret=CLIENT_SECRET,
-                                   resource_owner_key=owner_key,
-                                   resource_owner_secret=owner_secret)
+                            oauth = OAuth1(CLIENT_KEY,
+                                           client_secret=CLIENT_SECRET,
+                                           resource_owner_key=owner_key,
+                                           resource_owner_secret=owner_secret)
 
-                    # TODO: only for testing
-                    if not is_ss:
-                        parent_id = 9472
-                    else:
-                        parent_id = 0
+                            parent_id = 0
+                            if not is_ss:
+                                startList0 = time.time()
+                                response = list_content(oauth, 0, is_ss)
+                                endList0 = time.time()
+                                fw.write("[DEBUG] line %d, list_content root, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                print ("[DEBUG] line %d, list_content root, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                json_data = response.json()
+                                content_root = json_data["contents"]
+                                parent_id = None
+                                for tuppla in content_root:
+                                    try:
+                                        name = tuppla["filename"]
+                                        is_folder = tuppla["is_folder"]
+                                        if name == "Shared with me" and is_folder:
+                                            parent_id = tuppla["id"]
+                                            break
+                                    except KeyError:
+                                        raise ValueError("Error with folder initialization")
 
-                    response = make(oauth, "shared_folder", parent_id=parent_id, is_folder=True, is_ss_provider=is_ss)
-                    if response.status_code == 201:
-                        json_data = json.loads(response.text)
-                        folder_id = str(json_data["id"])
-                    elif (
-                            response.status_code == 400 or response.status_code == 403) and "Folder already exist" in response.text:
-                        response = list_content(oauth, parent_id=parent_id, is_ss_provider=is_ss)
-                        json_data = response.json()
-                        content_root = json_data["contents"]
-                        folder_id = None
-                        for tuppla in content_root:
-                            try:
-                                name = tuppla["filename"]
-                                is_folder = tuppla["is_folder"]
-                                if name == "shared_folder" and is_folder:
-                                    folder_id = tuppla["id"]
-                                    break
-                            except:
+                                if parent_id is None:
+                                    raise ValueError("Error with folder initialization")
+
+                            startMakeFolder = time.time()
+                            response = make(oauth, "shared_folder", parent_id=parent_id, is_folder=True, is_ss_provider=is_ss)
+                            endMakeFolder = time.time()
+                            fw.write("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                            print ("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                            if response.status_code == 201:
+                                json_data = json.loads(response.text)
+                                folder_id = str(json_data["id"])
+                            elif (
+                                    response.status_code == 400 or response.status_code == 403) and "Folder already exist" in response.text:
+                                startListSharedFolder = time.time()
+                                response = list_content(oauth, parent_id=parent_id, is_ss_provider=is_ss)
+                                endListSharedFolder = time.time()
+                                fw.write("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                print ("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                json_data = response.json()
+                                content_root = json_data["contents"]
+                                folder_id = None
+                                for tuppla in content_root:
+                                    try:
+                                        name = tuppla["filename"]
+                                        is_folder = tuppla["is_folder"]
+                                        if name == "shared_folder" and is_folder:
+                                            folder_id = tuppla["id"]
+                                            break
+                                    except:
+                                        raise ValueError("Error with folder initialization")
+                                if folder_id is None:
+                                    raise ValueError("Error with folder initialization")
+                            else:
                                 raise ValueError("Error with folder initialization")
-                        if folder_id is None:
-                            raise ValueError("Error with folder initialization")
-                    else:
-                        raise ValueError("Error with folder initialization")
 
-                    response = make(oauth, "file0.txt", parent_id=folder_id, is_folder=False, is_ss_provider=is_ss)
-                    if response.status_code == 201:
-                        json_data = json.loads(response.text)
-                        file_id = str(json_data["id"])
-                    elif (response.status_code == 400 or response.status_code == 403) and \
-                            ("This name is already used in the same folder. Please use a different one."
-                             in response.text or "File already exist" in response.text):
-                        response = list_content(oauth, parent_id=folder_id, is_ss_provider=is_ss)
-                        json_data = response.json()
-                        content_root = json_data["contents"]
-                        file_id = None
-                        for tuppla in content_root:
-                            try:
-                                name = tuppla["filename"]
-                                is_folder = tuppla["is_folder"]
-                                if name == "file0.txt" and not is_folder:
-                                    file_id = tuppla["id"]
-                                    break
-                            except:
+                            startMakeFile0 = time.time()
+                            response = make(oauth, "file0.txt", parent_id=folder_id, is_folder=False, is_ss_provider=is_ss)
+                            endMakeFile0 = time.time()
+                            fw.write("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                            print ("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                            if response.status_code == 201:
+                                json_data = json.loads(response.text)
+                                file_id = str(json_data["id"])
+                            elif (response.status_code == 400 or response.status_code == 403) and \
+                                    ("This name is already used in the same folder. Please use a different one."
+                                     in response.text or "File already exist" in response.text):
+                                startListSharedFolder = time.time()
+                                response = list_content(oauth, parent_id=folder_id, is_ss_provider=is_ss)
+                                endListSharedFolder = time.time()
+                                fw.write("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                print ("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                json_data = response.json()
+                                content_root = json_data["contents"]
+                                file_id = None
+                                for tuppla in content_root:
+                                    try:
+                                        name = tuppla["filename"]
+                                        is_folder = tuppla["is_folder"]
+                                        if name == "file0.txt" and not is_folder:
+                                            file_id = tuppla["id"]
+                                            break
+                                    except:
+                                        raise ValueError("Error with file initialization")
+                                if file_id is None:
+                                    raise ValueError("Error with file initialization")
+                            else:
                                 raise ValueError("Error with file initialization")
-                        if file_id is None:
-                            raise ValueError("Error with file initialization")
-                    else:
-                        raise ValueError("Error with file initialization")
 
-                    sentence = "%s,%s,%s,%s,%s,%s\n" % (user_id, owner_key, owner_secret, provider, folder_id, file_id)
-                    fw.write(sentence)
+                            sentence = "%s,%s,%s,%s,%s,%s\n" % (user_id, owner_key, owner_secret, provider, folder_id, file_id)
+                            fw.write(sentence)
+                    except Exception as e:
+                        fw.write("[ERROR] %s, %d, %s, %s\n" % (str(time.time()), i, line, e.message))
+                        print ("[ERROR] %s, %d, %s, %s\n" % (str(time.time()), i, line, e.message))
 
 
 def process_friendship(scenario_path, relations_path, interop_path):
@@ -204,7 +248,7 @@ def process_friendship(scenario_path, relations_path, interop_path):
                                resource_owner_key=owner_key,
                                resource_owner_secret=owner_secret)
 
-                # def User(user_id, oauth, shared_folder_id, provider, =dict(), file0_id=None):
+                # def User(user_id, oauth, shared_folder_id, provider, friends_id_factor_dict=dict(), file0_id=None)
                 user = User(user_id, oauth, folder0_id, provider, file0_id=file0_id)
                 users_dict[user_id] = user
 
@@ -221,20 +265,24 @@ def process_friendship(scenario_path, relations_path, interop_path):
                     if user1_id in users_dict and user2_id in users_dict:
                         # user2_id share his folder with user1
                         user1 = users_dict[user1_id]
-                        user2 = users_dict[user2_id]
-                        user2_oauth = user2.oauth
-                        user2_shared_folder_id = users_dict[user2_id].shared_folder_id
-                        if user1_id == user2_id:
-                            user1.friends_id_factor_dict[user2_id] = factor
-                        else:
-                            # TODO: Add nec provider
-                            if user1.provider == "SS":
-                                friend_email = "%s@stacksync.org" % (user1.id)
-                            else:
-                                friend_email = "%s@nec.com" % (user1.id)
-                            response = share(user2_oauth, user2_shared_folder_id, friend_email)
-                            if response.status_code == 201:
-                                user1.friends_id_factor_dict[user2_id] = factor
+                        # user2 = users_dict[user2_id]
+                        # user2_oauth = user2.oauth
+                        # user2_shared_folder_id = users_dict[user2_id].shared_folder_id
+
+                        # if user1.id != user2.id:
+                        #     if user1.provider == "SS" and user2.provider == "SS":
+                        #         if user1.provider == "SS":
+                        #             friend_email = "%s@stacksync.org" % (user1.id)
+                        #         else:
+                        #             friend_email = "%s@nec.com" % (user1.id)
+                        #
+                        #         response = share(user2_oauth, user2_shared_folder_id, friend_email)
+                        #         if response.status_code != 201:
+                        #             print "Lines ", i, " Error at share ", user1.id, user1.provider, "with friend", user2.id, user2.provider, response, response.text
+                        #     else:
+                        #         print user1.id, user1.provider, "with friend", user2.id, user2.provider
+
+                        user1.friends_id_factor_dict[user2_id] = factor
                 except KeyError:
                     pass
 
@@ -314,7 +362,7 @@ if __name__ == "__main__":
     script_path = os.path.realpath(__file__)[:os.path.realpath(__file__).rfind("/")]
 
     # Fixed
-    relations_path = script_path + "/../target/users_sharing_factor.csv"
+    relations_path = script_path + "/../target/data/users_sharing_factor.csv"
 
     # Editable
     # StackSync
@@ -326,11 +374,23 @@ if __name__ == "__main__":
     nec_users_path = script_path + "/../target/nec_users.csv"
     nec_credentials_path = script_path + "/../target/nec_users_credentials.csv"
     nec_server_id_path = script_path + "/../target/nec_users_credentials_server_id.csv"
-    final_path = script_path + "/../target/nec_full_interop_info.csv"
+    final_path = script_path + "/../target/cpd/users_full_interop_info.csv"
+
+    # Interop
+    interop_ss_users_path = script_path + "/../target/data/users_ss_provider.csv"
+    interop_ss_credentials_path = script_path + "/../target/cpd/interop_users_credentials.csv"
+    interop_ss_server_id_path = script_path + "/../target/cpd/interop_users_credentials_server_id.csv"
+
+    # interop_nec_credentials_path = script_path + "/../target/cpd/nec_error_credentials.csv"
+    interop_nec_credentials_path = script_path + "/../target/cpd/new_nec_error_credentials.csv"
+    interop_nec_server_id_path = script_path + "/../target/cpd/interop_nec_users_credentials_server_id_2.csv"
+
+    data_path = script_path + "/../target/cpd/interop_users_credentials.csv"
 
     nec_path = script_path + "/../target/users_nec_provider.csv"
     ss_path = script_path + "/../target/users_ss_provider.csv"
     table_path = script_path + "/../target/interop_list_users_with_friends.csv"
+    print "Start"
     try:
         # translate_nec_to_u1(script_path)
         # load_interop_users(script_path)
@@ -339,9 +399,10 @@ if __name__ == "__main__":
 
         # Correct steps
         # retrieve_credentials(nec_users_path, nec_credentials_path, False)
-        # retrieve_credentials(ast3_users_path, ast3_credentials_path, True)
+        # retrieve_credentials(interop_users_path, interop_credentials_path, True)
         # credentials_path = script_path + "/../target/mini_test_users_credentials.csv"
-        initialize_scenario(ast3_credentials_path, ast3_server_id_path)
-        # process_friendship(data_path, relations_path, final_path)
+        # initialize_scenario(interop_nec_credentials_path, interop_nec_server_id_path)
+        process_friendship(data_path, relations_path, final_path)
     except (KeyboardInterrupt, SystemExit):
         print ("\nExperiment killed")
+    print "End"
