@@ -2,7 +2,7 @@
 import time
 from API_manager import *
 from requests_oauthlib import OAuth1
-from trace_processor import ThreadTraceProcessor, User
+from trace_processor import TraceProcessor, User
 from decimal import *
 
 user_oauth = dict()
@@ -58,13 +58,14 @@ def read_users_info(user_file):
                     users_dict[user_id] = user
 
 
-def run_threads_experiment(num_threads, file_trace_path):
-    print "\nStarting experiment with %d threads" % (num_threads)
-    for i in range(0, num_threads):
-        t = ThreadTraceProcessor(i, num_threads, file_trace_path)
-        t.setDaemon(True)
-        threads_pool.append(t)
-        t.start()
+def run_threads_experiment(file_trace_path):
+    # print "\nStarting experiment with %d threads" % (num_threads)
+    # for i in range(0, num_threads):
+    #     t = ThreadTraceProcessor(i, num_threads, file_trace_path)
+    #     t.setDaemon(True)
+    #     threads_pool.append(t)
+    #     t.start()
+    processor = TraceProcessor(file_trace_path)
 
 
 def wait_experiment():
@@ -157,9 +158,13 @@ def print_usage():
 
 if __name__ == "__main__":
     script_path = __file__[:__file__.rfind("/")]
-    # file_users_path = script_path + "/../target/cpd/ss_full_interop_info.csv"
-    file_users_path = script_path + "/../target/cpd/users_full_interop_info.csv"
-    file_trace_path = script_path + "/../traces/interop_ops_without_moves.csv"
+    # # Rack
+    # file_users_path = script_path + "/../target/cpd/users_full_interop_info.csv"
+    # file_trace_path = script_path + "/../traces/interop_ops_without_moves.csv"
+
+    # Local
+    file_users_path = script_path + "/../target/ast3_full_interop_info.csv"
+    file_trace_path = script_path + "/../target/ast3_ops.csv"
     print __file__
     try:
         argv_list = sys.argv
@@ -167,38 +172,36 @@ if __name__ == "__main__":
         if len(argv_list) != 2:
             print_usage()
         else:
-            try:
+            if argv_list[1] == "run":
                 # Run experiment
-                num_threads = int(argv_list[1])
                 read_users_info(file_users_path)
-                run_threads_experiment(num_threads, file_trace_path)
-                wait_experiment()
-            except ValueError:
-                if argv_list[1] == "clean":
-                    clean_environment(file_users_path)
-                elif argv_list[1] == "list":
-                    create_test_user()
-                    folder_id = raw_input("Folder id: ")
-                    response = list_content(user_oauth[0], parent_id=folder_id, is_ss_provider=False)
-                    print response.text
-                    json_data = response.json()
-                    content_root = json_data["contents"]
-                    for line in content_root:
-                        try:
-                            name = line["filename"]
-                            server_id = line["id"]
-                            is_folder = line["is_folder"]
-                            status = line["status"]
-                            print name, server_id, is_folder, status
-                        except:
-                            pass
-                elif argv_list[1] == "test":
-                    test_api(script_path)
-                elif argv_list[1] == "interop":
-                    read_users_info(script_path)
-                else:
-                    print "ERROR: Option %s is not permitted" % (argv_list[1])
-                    print_usage()
+                run_threads_experiment(file_trace_path)
+                # wait_experiment()
+            elif argv_list[1] == "clean":
+                clean_environment(file_users_path)
+            elif argv_list[1] == "list":
+                create_test_user()
+                folder_id = raw_input("Folder id: ")
+                response = list_content(user_oauth[0], parent_id=folder_id, is_ss_provider=False)
+                print response.text
+                json_data = response.json()
+                content_root = json_data["contents"]
+                for line in content_root:
+                    try:
+                        name = line["filename"]
+                        server_id = line["id"]
+                        is_folder = line["is_folder"]
+                        status = line["status"]
+                        print name, server_id, is_folder, status
+                    except:
+                        pass
+            elif argv_list[1] == "test":
+                test_api(script_path)
+            elif argv_list[1] == "interop":
+                read_users_info(script_path)
+            else:
+                print "ERROR: Option %s is not permitted" % (argv_list[1])
+                print_usage()
 
     except (KeyboardInterrupt, SystemExit):
         print ("\nExperiment killed")

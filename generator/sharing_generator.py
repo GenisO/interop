@@ -121,11 +121,10 @@ def initialize_scenario(credentials_path, scenario_path):
                     try:
                         line = line.rstrip('\r\n').split(",")
                         if len(line) == 4:
-                            user_id = line[1]
-                            owner_key = line[2]
-                            owner_secret = line[3]
-                            # provider = line[3]
-                            provider = "NEC"
+                            user_id = line[0]
+                            owner_key = line[1]
+                            owner_secret = line[2]
+                            provider = line[3]
                             is_ss = provider == "SS"
 
                             oauth = OAuth1(CLIENT_KEY,
@@ -159,8 +158,8 @@ def initialize_scenario(credentials_path, scenario_path):
                             startMakeFolder = time.time()
                             response = make(oauth, "shared_folder", parent_id=parent_id, is_folder=True, is_ss_provider=is_ss)
                             endMakeFolder = time.time()
-                            fw.write("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
-                            print ("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                            fw.write("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endMakeFolder-startMakeFolder), response.status_code))
+                            print ("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endMakeFolder-startMakeFolder), response.status_code))
                             if response.status_code == 201:
                                 json_data = json.loads(response.text)
                                 folder_id = str(json_data["id"])
@@ -169,8 +168,8 @@ def initialize_scenario(credentials_path, scenario_path):
                                 startListSharedFolder = time.time()
                                 response = list_content(oauth, parent_id=parent_id, is_ss_provider=is_ss)
                                 endListSharedFolder = time.time()
-                                fw.write("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
-                                print ("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                fw.write("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
+                                print ("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
                                 json_data = response.json()
                                 content_root = json_data["contents"]
                                 folder_id = None
@@ -182,17 +181,17 @@ def initialize_scenario(credentials_path, scenario_path):
                                             folder_id = tuppla["id"]
                                             break
                                     except:
-                                        raise ValueError("Error with folder initialization")
+                                        raise ValueError("Error with folder initialization 1")
                                 if folder_id is None:
-                                    raise ValueError("Error with folder initialization")
+                                    raise ValueError("Error with folder initialization 2")
                             else:
-                                raise ValueError("Error with folder initialization")
+                                raise ValueError("Error with folder initialization 3")
 
                             startMakeFile0 = time.time()
                             response = make(oauth, "file0.txt", parent_id=folder_id, is_folder=False, is_ss_provider=is_ss)
                             endMakeFile0 = time.time()
-                            fw.write("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
-                            print ("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                            fw.write("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endMakeFile0-startMakeFile0), response.status_code))
+                            print ("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endMakeFile0-startMakeFile0), response.status_code))
                             if response.status_code == 201:
                                 json_data = json.loads(response.text)
                                 file_id = str(json_data["id"])
@@ -202,8 +201,8 @@ def initialize_scenario(credentials_path, scenario_path):
                                 startListSharedFolder = time.time()
                                 response = list_content(oauth, parent_id=folder_id, is_ss_provider=is_ss)
                                 endListSharedFolder = time.time()
-                                fw.write("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
-                                print ("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                fw.write("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
+                                print ("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
                                 json_data = response.json()
                                 content_root = json_data["contents"]
                                 file_id = None
@@ -401,8 +400,8 @@ if __name__ == "__main__":
         # retrieve_credentials(nec_users_path, nec_credentials_path, False)
         # retrieve_credentials(interop_users_path, interop_credentials_path, True)
         # credentials_path = script_path + "/../target/mini_test_users_credentials.csv"
-        # initialize_scenario(interop_nec_credentials_path, interop_nec_server_id_path)
-        process_friendship(data_path, relations_path, final_path)
+        initialize_scenario(ast3_credentials_path, ast3_server_id_path)
+        # process_friendship(data_path, relations_path, final_path)
     except (KeyboardInterrupt, SystemExit):
         print ("\nExperiment killed")
     print "End"
