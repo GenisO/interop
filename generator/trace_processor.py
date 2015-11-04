@@ -1,4 +1,7 @@
 # encoding: utf-8
+from apt.package import DeprecatedProperty
+from collections import deque
+from lib2to3.pgen2.grammar import op
 import os
 import time
 import random
@@ -86,20 +89,19 @@ class TraceProcessor:
     csv_provider = 10
 
     all_users_dict = dict()
-    processing_threads = list()
+    processing_threads = dict()
 
-    def __init__(self, p_trace_path):
+    def __init__(self, p_trace_path, test=False):
         # threading.Thread.__init__(self)
 
         self.trace_path = p_trace_path
+        self.test_concurrency = test
+
         process_log("tstamp", "user_out_id", "user_out_type", "req_t", "origin_provider", "destination_provider",
                     "user_in_id", "node_id", "node_type", "size", "elapsed", "friends_number", "error_msg")
         self.event_dispatcher()
 
-    def run(self):
-        # self.load_initial_parameters()
-        self.event_dispatcher()
-
+    # deprecated
     def load_initial_parameters(self):
         for user_id in TraceProcessor.all_users_dict:
             if user_id % self.num_threads == self.thread_id:
@@ -177,52 +179,89 @@ class TraceProcessor:
                                     user.workspaces_oauth[friend_id] = acces_oauth
 
     def event_dispatcher(self):
-        previous_normalized_timestamp = 0
-        previous_time = time.time()
-        with open(self.trace_path, "r") as fp:
-            for i, line in enumerate(fp):
-                event = line.rstrip("\n").split(",")
-                if len(event) == 9:
-                    elapsed = time.time() - previous_time
-                    t_sleep = int(event[TraceProcessor.csv_normalized_timestamp]) - previous_normalized_timestamp
-                    # Control sleep time
-                    t_sleep = t_sleep - elapsed
-                    if t_sleep < 0:
-                        t_sleep = 0
-                    time.sleep(t_sleep)
-                    previous_normalized_timestamp = int(event[TraceProcessor.csv_normalized_timestamp])
-                    user_id = int(event[TraceProcessor.csv_user_id])
-                    # if user_id % self.num_threads == self.thread_id:
-                    #     # Process op
-                    #     switcher = {
-                    #         "GetContentResponse": self.process_get,
-                    #         "MakeResponse": self.process_make,
-                    #         "MoveResponse": self.process_move,
-                    #         "PutContentResponse": self.process_put,
-                    #         "Unlink": self.process_delete,
-                    #     }
-                    #     # Get the function from switcher dictionary
-                    #     func = switcher.get(event[TraceProcessor.csv_req_type])
-                    #     self.preprocessor(i, func, event)
-                    t1 = ThreadedPetition(i, event)
-                    t1.setDaemon(True)
-                    t1.start()
-                    self.processing_threads.append(t1)
-                    previous_time = time.time()
-                else:
-                    process_debug_log("Avoided line %s" % (line))
-        # process_debug_log("Thread %d - Finished" % (self.thread_id))
-        self.wait_experiment()
+        previous_normalized_timestamp = decimal.Decimal("0.00000000")
+        previous_time = decimal.Decimal(time.time())
+
+        # TODO: Only for testing
+        if self.test_concurrency:
+            self.prove_concurrency(previous_normalized_timestamp, previous_time)
+        else:
+            with open(self.trace_path, "r") as fp:
+                for i, line in enumerate(fp):
+                    event = line.rstrip("\n").split(",")
+                    if len(event) == 9:
+                        elapsed = decimal.Decimal(time.time()) - previous_time
+                        t_sleep = decimal.Decimal(
+                            event[TraceProcessor.csv_normalized_timestamp]) - previous_normalized_timestamp
+                        # Control sleep time
+                        t_sleep = t_sleep - elapsed
+                        if t_sleep < 0:
+                            t_sleep = decimal.Decimal("0.00000000")
+                        time.sleep(t_sleep)
+                        previous_normalized_timestamp = decimal.Decimal(
+                            event[TraceProcessor.csv_normalized_timestamp])
+
+                        user_id = int(event[TraceProcessor.csv_user_id])
+
+                        if user_id in self.processing_threads:
+                            t1 = self.processing_threads[user_id]
+                            t1.add_event(i, event)
+                            if not t1.running or not t1.isAlive():
+                                t1.run()
+                        else:
+                            t1 = ThreadedPetition(user_id, i, event)
+                            t1.setDaemon(True)
+                            t1.start()
+                            self.processing_threads[user_id] = t1
+
+                        previous_time = decimal.Decimal(time.time())
+                    else:
+                        process_debug_log("Avoided line %s" % (line))
+            self.wait_experiment()
+
+    # TODO: Only for testing
+    def prove_concurrency(self, previous_normalized_timestamp, previous_time):
+        for total_ops in range(1, 50):
+            for loop in range(0, int(total_ops / 16) + 1):
+                with open(self.trace_path, "r") as fp:
+                    for i, line in enumerate(fp):
+                        event = line.rstrip("\n").split(",")
+                        if len(event) == 9 and i + loop * 16 < total_ops:
+                            user_id = int(event[TraceProcessor.csv_user_id])
+
+                            if user_id in self.processing_threads:
+                                t1 = self.processing_threads[user_id]
+                                t1.add_event(i, event)
+                                if not t1.running or not t1.isAlive():
+                                    t1.run()
+                            else:
+                                t1 = ThreadedPetition(user_id, i, event)
+                                t1.setDaemon(True)
+                                t1.start()
+
+                            previous_time = decimal.Decimal(time.time())
+                        elif i + loop * 16 == total_ops:
+                            break
+                        else:
+                            process_debug_log("Avoided line %s" % (line))
+                self.wait_experiment()
+                raw_input("Concurrent %d ops done! Press to next" % total_ops)
+                print "\n"
 
     def wait_experiment(self):
-        print "\nWaiting ",
-        while len(self.processing_threads) > 0:
-            for t in self.processing_threads:
+        print "\nWaiting "
+        wait = True
+        while wait:
+            wait = not wait
+            for u in self.processing_threads:
+                t = self.processing_threads[u]
                 t.join(1)
                 print_seq_dots()
-                # if not t.isAlive():
-                #     self.processing_threads.remove(t)
+                if t.isAlive():
+                    wait = True
+                    break
         print ("\nExperiment has finished")
+
 
 def print_seq_dots():
     sys.stdout.write('.')
@@ -230,25 +269,36 @@ def print_seq_dots():
 
 
 class ThreadedPetition(threading.Thread):
-    def __init__(self, ops_counter, event):
+    def __init__(self, user, ops_counter, event):
         threading.Thread.__init__(self)
-        self.ops_counter = ops_counter
-        self.event_args = event
+        self.running = False
+        self.first_ops_counter = ops_counter
+        self.user = user
+
+        self.event_args = deque()
+        self.event_args.append([ops_counter, event])
+
+    def add_event(self, ops_counter, event):
+        self.first_ops_counter = ops_counter
+        self.event_args.append([ops_counter, event])
 
     def run(self):
-        print "Thread start ", self.ident, " count ", self.ops_counter
-        # Process op
-        switcher = {
-            "GetContentResponse": self.process_get,
-            "MakeResponse": self.process_make,
-            "MoveResponse": self.process_move,
-            "PutContentResponse": self.process_put,
-            "Unlink": self.process_delete,
-        }
-        func = switcher.get(self.event_args[TraceProcessor.csv_req_type])
-        self.preprocessor(self.ops_counter, func, self.event_args)
-        # del(self)
-        TraceProcessor.processing_threads.remove(self)
+        print "Thread start ", self.ident, " count ", self.first_ops_counter, "\n"
+        self.running = True
+        while len(self.event_args) > 0:
+            [ops_counter, event] = self.event_args.popleft()
+            # Process op
+            switcher = {
+                "GetContentResponse": self.process_get,
+                "MakeResponse": self.process_make,
+                "MoveResponse": self.process_move,
+                "PutContentResponse": self.process_put,
+                "Unlink": self.process_delete,
+            }
+            func = switcher.get(event[TraceProcessor.csv_req_type])
+            self.preprocessor(ops_counter, func, event)
+
+        self.running = False
 
     def preprocessor(self, ops_counter, func, event_args):
         user_id = int(event_args[TraceProcessor.csv_user_id])
@@ -258,6 +308,7 @@ class ThreadedPetition(threading.Thread):
             if user.provider == "NEC":
                 raise KeyError
         except KeyError:
+            # TODO: Only for testing
             user = TraceProcessor.all_users_dict[3439236469]
             event_args = copy.deepcopy(event_args)
             event_args[TraceProcessor.csv_user_id] = str(3439236469)
@@ -301,8 +352,10 @@ class ThreadedPetition(threading.Thread):
 
     def process_make(self, event_args, ops_counter):
         process_debug_log("Count %d ProcessMakeResponse node_id %d of user_id %s" % (ops_counter,
-                                                                                     int(event_args[TraceProcessor.csv_node_id]),
-                                                                                     int(event_args[TraceProcessor.csv_user_id])))
+                                                                                     int(event_args[
+                                                                                             TraceProcessor.csv_node_id]),
+                                                                                     int(event_args[
+                                                                                             TraceProcessor.csv_user_id])))
 
         user_id = int(event_args[TraceProcessor.csv_user_id])
         node_id = int(event_args[TraceProcessor.csv_node_id])
@@ -408,8 +461,6 @@ class ThreadedPetition(threading.Thread):
             else:
                 server_id = friend.node_server_id_dict[node_id]
 
-            # TODO: Only for testing
-            # size = 1
             if size < 1:
                 size = 2
             with open(local_path, "w"):
@@ -524,8 +575,10 @@ class ThreadedPetition(threading.Thread):
 
     def process_delete(self, event_args, ops_counter):
         process_debug_log("Count %d ProcessUnlink node_id %d of user_id %s" % (ops_counter,
-                                                                               int(event_args[TraceProcessor.csv_node_id]),
-                                                                               int(event_args[TraceProcessor.csv_user_id])))
+                                                                               int(event_args[
+                                                                                       TraceProcessor.csv_node_id]),
+                                                                               int(event_args[
+                                                                                       TraceProcessor.csv_user_id])))
 
         user_id = int(event_args[TraceProcessor.csv_user_id])
         node_id = int(event_args[TraceProcessor.csv_node_id])
@@ -580,7 +633,8 @@ class ThreadedPetition(threading.Thread):
                                 str(TraceProcessor.all_users_dict[user_id].provider),
                                 str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id),
                                 str(server_id),
-                                str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]), str(elapsed),
+                                str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]),
+                                str(elapsed),
                                 str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), "NULL")
                 else:
                     raise ValueError(
@@ -590,7 +644,8 @@ class ThreadedPetition(threading.Thread):
                             str(event_args[TraceProcessor.csv_req_type]),
                             str(TraceProcessor.all_users_dict[user_id].provider),
                             str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), "-1",
-                            str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]), "0",
+                            str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]),
+                            "0",
                             str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), "NULL")
         except Exception as e:
             error_msg = "Exception at Unlink: trace %s. Error Description: type=%s message={%s} args={%s}" % (
@@ -606,7 +661,8 @@ class ThreadedPetition(threading.Thread):
 
     def process_move(self, event_args, ops_counter):
         process_debug_log("Count %d Process MoveResponse node_id %d of user_id %s" % (ops_counter,
-                                                                                      int(event_args[TraceProcessor.csv_node_id]),
+                                                                                      int(event_args[
+                                                                                              TraceProcessor.csv_node_id]),
                                                                                       int(event_args[
                                                                                               TraceProcessor.csv_user_id])))
         pass
@@ -663,7 +719,8 @@ class ThreadedPetition(threading.Thread):
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
-                        str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]), str(elapsed),
+                        str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]),
+                        str(elapsed),
                         str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), "NULL")
         except Exception as e:
             error_msg = "Exception at MoveResponse: trace %s. Error Description: type=%s message={%s} args={%s}" % (

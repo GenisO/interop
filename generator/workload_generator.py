@@ -59,24 +59,7 @@ def read_users_info(user_file):
 
 
 def run_threads_experiment(file_trace_path):
-    # print "\nStarting experiment with %d threads" % (num_threads)
-    # for i in range(0, num_threads):
-    #     t = ThreadTraceProcessor(i, num_threads, file_trace_path)
-    #     t.setDaemon(True)
-    #     threads_pool.append(t)
-    #     t.start()
-    processor = TraceProcessor(file_trace_path)
-
-
-def wait_experiment():
-    print "\nWaiting ",
-    while len(threads_pool) > 0:
-        for t in threads_pool:
-            t.join(1)
-            print_seq_dots()
-            if not t.isAlive():
-                threads_pool.remove(t)
-    print ("\nExperiment has finished")
+    TraceProcessor(file_trace_path)
 
 
 def clean_environment(users_path):
@@ -87,21 +70,24 @@ def clean_environment(users_path):
         user = users_dict[user_id]
         is_ss_provider = user.provider == "SS"
         response = list_content(user.oauth, user.shared_folder_id, is_ss_provider)
-        json_data = response.json()
-        content_root = json_data["contents"]
-        print i, " ", user_id
-        for line in content_root:
-            try:
-                print_seq_dots()
-                name = line["filename"]
-                server_id = line["id"]
-                is_folder = line["is_folder"]
-                if name.isdigit():
-                    response = unlink(user.oauth, server_id, is_folder, is_ss_provider)
-                    if response.status_code != 200:
-                        print response, response.text, response.content
-            except KeyError:
-                pass
+        if response.status_code == 200:
+            json_data = response.json()
+            content_root = json_data["contents"]
+            print i, " ", user_id
+            for line in content_root:
+                try:
+                    print_seq_dots()
+                    name = line["filename"]
+                    server_id = line["id"]
+                    is_folder = line["is_folder"]
+                    if name.isdigit():
+                        response = unlink(user.oauth, server_id, is_folder, is_ss_provider)
+                        if response.status_code != 200:
+                            print response, response.text, response.content
+                except KeyError:
+                    pass
+        else:
+            print i, user_id, response, response.text, response.content
         print
 
 
@@ -113,7 +99,7 @@ def test_api(path):
     start = time.time()
     response = make(user_oauth[0], "151548", parent_id=39780, is_folder=False, is_ss_provider=is_ss_provider)
     end = time.time()
-    print "MAKE file", int(end-start)
+    print "MAKE file", int(end - start)
     print response
     print response.headers
     print response.text
@@ -164,7 +150,7 @@ if __name__ == "__main__":
 
     # Local
     file_users_path = script_path + "/../target/ast3_full_interop_info.csv"
-    file_trace_path = script_path + "/../target/ast3_ops.csv"
+    file_trace_path = script_path + "/../target/ast3_ops_norm.csv"
     print __file__
     try:
         argv_list = sys.argv
@@ -176,7 +162,6 @@ if __name__ == "__main__":
                 # Run experiment
                 read_users_info(file_users_path)
                 run_threads_experiment(file_trace_path)
-                # wait_experiment()
             elif argv_list[1] == "clean":
                 clean_environment(file_users_path)
             elif argv_list[1] == "list":
