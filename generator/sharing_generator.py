@@ -120,7 +120,7 @@ def initialize_scenario(credentials_path, scenario_path):
                 if i > 0:
                     try:
                         line = line.rstrip('\r\n').split(",")
-                        if len(line) == 4:
+                        if len(line) >= 4:
                             user_id = line[0]
                             owner_key = line[1]
                             owner_secret = line[2]
@@ -133,95 +133,96 @@ def initialize_scenario(credentials_path, scenario_path):
                                            resource_owner_secret=owner_secret)
 
                             parent_id = 0
-                            if not is_ss:
-                                startList0 = time.time()
-                                response = list_content(oauth, 0, is_ss)
-                                endList0 = time.time()
-                                fw.write("[DEBUG] line %d, list_content root, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
-                                print ("[DEBUG] line %d, list_content root, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
-                                json_data = response.json()
-                                content_root = json_data["contents"]
-                                parent_id = None
-                                for tuppla in content_root:
-                                    try:
-                                        name = tuppla["filename"]
-                                        is_folder = tuppla["is_folder"]
-                                        if name == "Shared with me" and is_folder:
-                                            parent_id = tuppla["id"]
-                                            break
-                                    except KeyError:
+                            if is_ss:
+                                if not is_ss:
+                                    startList0 = time.time()
+                                    response = list_content(oauth, 0, is_ss)
+                                    endList0 = time.time()
+                                    fw.write("[DEBUG] line %d, list_content root, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                    print ("[DEBUG] line %d, list_content root, %d response_code %d\n" % (i, int(endList0-startList0), response.status_code))
+                                    json_data = response.json()
+                                    content_root = json_data["contents"]
+                                    parent_id = None
+                                    for tuppla in content_root:
+                                        try:
+                                            name = tuppla["filename"]
+                                            is_folder = tuppla["is_folder"]
+                                            if name == "Shared with me" and is_folder:
+                                                parent_id = tuppla["id"]
+                                                break
+                                        except KeyError:
+                                            raise ValueError("Error with folder initialization")
+
+                                    if parent_id is None:
                                         raise ValueError("Error with folder initialization")
 
-                                if parent_id is None:
-                                    raise ValueError("Error with folder initialization")
+                                startMakeFolder = time.time()
+                                response = make(oauth, "shared_folder", parent_id=parent_id, is_folder=True, is_ss_provider=is_ss)
+                                endMakeFolder = time.time()
+                                fw.write("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endMakeFolder-startMakeFolder), response.status_code))
+                                print ("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endMakeFolder-startMakeFolder), response.status_code))
+                                if response.status_code == 201:
+                                    json_data = json.loads(response.text)
+                                    folder_id = str(json_data["id"])
+                                elif (
+                                        response.status_code == 400 or response.status_code == 403) and "Folder already exist" in response.text:
+                                    startListSharedFolder = time.time()
+                                    response = list_content(oauth, parent_id=parent_id, is_ss_provider=is_ss)
+                                    endListSharedFolder = time.time()
+                                    fw.write("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
+                                    print ("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
+                                    json_data = response.json()
+                                    content_root = json_data["contents"]
+                                    folder_id = None
+                                    for tuppla in content_root:
+                                        try:
+                                            name = tuppla["filename"]
+                                            is_folder = tuppla["is_folder"]
+                                            if name == "shared_folder" and is_folder:
+                                                folder_id = tuppla["id"]
+                                                break
+                                        except:
+                                            raise ValueError("Error with folder initialization 1")
+                                    if folder_id is None:
+                                        raise ValueError("Error with folder initialization 2")
+                                else:
+                                    raise ValueError("Error with folder initialization 3")
 
-                            startMakeFolder = time.time()
-                            response = make(oauth, "shared_folder", parent_id=parent_id, is_folder=True, is_ss_provider=is_ss)
-                            endMakeFolder = time.time()
-                            fw.write("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endMakeFolder-startMakeFolder), response.status_code))
-                            print ("[DEBUG] line %d, make shared_folder, %d response_code %d\n" % (i, int(endMakeFolder-startMakeFolder), response.status_code))
-                            if response.status_code == 201:
-                                json_data = json.loads(response.text)
-                                folder_id = str(json_data["id"])
-                            elif (
-                                    response.status_code == 400 or response.status_code == 403) and "Folder already exist" in response.text:
-                                startListSharedFolder = time.time()
-                                response = list_content(oauth, parent_id=parent_id, is_ss_provider=is_ss)
-                                endListSharedFolder = time.time()
-                                fw.write("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
-                                print ("[DEBUG] line %d, list shared_folder, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
-                                json_data = response.json()
-                                content_root = json_data["contents"]
-                                folder_id = None
-                                for tuppla in content_root:
-                                    try:
-                                        name = tuppla["filename"]
-                                        is_folder = tuppla["is_folder"]
-                                        if name == "shared_folder" and is_folder:
-                                            folder_id = tuppla["id"]
-                                            break
-                                    except:
-                                        raise ValueError("Error with folder initialization 1")
-                                if folder_id is None:
-                                    raise ValueError("Error with folder initialization 2")
-                            else:
-                                raise ValueError("Error with folder initialization 3")
-
-                            startMakeFile0 = time.time()
-                            response = make(oauth, "file0.txt", parent_id=folder_id, is_folder=False, is_ss_provider=is_ss)
-                            endMakeFile0 = time.time()
-                            fw.write("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endMakeFile0-startMakeFile0), response.status_code))
-                            print ("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endMakeFile0-startMakeFile0), response.status_code))
-                            if response.status_code == 201:
-                                json_data = json.loads(response.text)
-                                file_id = str(json_data["id"])
-                            elif (response.status_code == 400 or response.status_code == 403) and \
-                                    ("This name is already used in the same folder. Please use a different one."
-                                     in response.text or "File already exist" in response.text):
-                                startListSharedFolder = time.time()
-                                response = list_content(oauth, parent_id=folder_id, is_ss_provider=is_ss)
-                                endListSharedFolder = time.time()
-                                fw.write("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
-                                print ("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
-                                json_data = response.json()
-                                content_root = json_data["contents"]
-                                file_id = None
-                                for tuppla in content_root:
-                                    try:
-                                        name = tuppla["filename"]
-                                        is_folder = tuppla["is_folder"]
-                                        if name == "file0.txt" and not is_folder:
-                                            file_id = tuppla["id"]
-                                            break
-                                    except:
+                                startMakeFile0 = time.time()
+                                response = make(oauth, "file0.txt", parent_id=folder_id, is_folder=False, is_ss_provider=is_ss)
+                                endMakeFile0 = time.time()
+                                fw.write("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endMakeFile0-startMakeFile0), response.status_code))
+                                print ("[DEBUG] line %d, make file0, %d response_code %d\n" % (i, int(endMakeFile0-startMakeFile0), response.status_code))
+                                if response.status_code == 201:
+                                    json_data = json.loads(response.text)
+                                    file_id = str(json_data["id"])
+                                elif (response.status_code == 400 or response.status_code == 403) and \
+                                        ("This name is already used in the same folder. Please use a different one."
+                                         in response.text or "File already exist" in response.text):
+                                    startListSharedFolder = time.time()
+                                    response = list_content(oauth, parent_id=folder_id, is_ss_provider=is_ss)
+                                    endListSharedFolder = time.time()
+                                    fw.write("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
+                                    print ("[DEBUG] line %d, list shared_folder file0, %d response_code %d\n" % (i, int(endListSharedFolder-startListSharedFolder), response.status_code))
+                                    json_data = response.json()
+                                    content_root = json_data["contents"]
+                                    file_id = None
+                                    for tuppla in content_root:
+                                        try:
+                                            name = tuppla["filename"]
+                                            is_folder = tuppla["is_folder"]
+                                            if name == "file0.txt" and not is_folder:
+                                                file_id = tuppla["id"]
+                                                break
+                                        except:
+                                            raise ValueError("Error with file initialization")
+                                    if file_id is None:
                                         raise ValueError("Error with file initialization")
-                                if file_id is None:
+                                else:
                                     raise ValueError("Error with file initialization")
-                            else:
-                                raise ValueError("Error with file initialization")
 
-                            sentence = "%s,%s,%s,%s,%s,%s\n" % (user_id, owner_key, owner_secret, provider, folder_id, file_id)
-                            fw.write(sentence)
+                                sentence = "%s,%s,%s,%s,%s,%s\n" % (user_id, owner_key, owner_secret, provider, folder_id, file_id)
+                                fw.write(sentence)
                     except Exception as e:
                         fw.write("[ERROR] %s, %d, %s, %s\n" % (str(time.time()), i, line, e.message))
                         print ("[ERROR] %s, %d, %s, %s\n" % (str(time.time()), i, line, e.message))
@@ -374,7 +375,8 @@ if __name__ == "__main__":
     nec_users_path = script_path + "/../target/nec_users.csv"
     nec_credentials_path = script_path + "/../target/nec_users_credentials.csv"
     nec_server_id_path = script_path + "/../target/nec_users_credentials_server_id.csv"
-    final_path = script_path + "/../target/cpd/users_full_interop_info.csv"
+    final_path = script_path + "/../traces/users_full_interop_info.csv"
+    final_new_path = script_path + "/../traces/new_users_full_interop_info.csv"
 
     # Interop
     interop_ss_users_path = script_path + "/../target/data/users_ss_provider.csv"
@@ -399,10 +401,11 @@ if __name__ == "__main__":
 
         # Correct steps
         # retrieve_credentials(nec_users_path, nec_credentials_path, False)
-        retrieve_credentials(ast3_users_path, ast3_credentials_path, True)
+        # retrieve_credentials(ast3_users_path, ast3_credentials_path, True)
         # credentials_path = script_path + "/../target/mini_test_users_credentials.csv"
-        initialize_scenario(ast3_credentials_path, ast3_server_id_path)
+        initialize_scenario(final_path, final_new_path)
         # process_friendship(data_path, relations_path, final_path)
     except (KeyboardInterrupt, SystemExit):
         print ("\nExperiment killed")
     print "End"
+

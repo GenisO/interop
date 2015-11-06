@@ -20,11 +20,11 @@ def print_seq_dots():
 
 
 def create_test_user():
-    # 3585146880,SS,39780,39795
+    # 604036065
     oauth = OAuth1(CLIENT_KEY,
-                   client_secret=CLIENT_SECRET,
-                   resource_owner_key="VABWlXtTGLnjsE4rLRCIGsse1d2Tie",
-                   resource_owner_secret="YYuFVJIPsOqcoQ8QXGkWRTv3M4ZGJs")
+            client_secret=CLIENT_SECRET,
+            resource_owner_key="VsspgI198E7Sfy1SMRaY15V0DIoxAP",
+            resource_owner_secret="lw1GUeFNrJSlj96iqQX6a4I7XW2rXA")
     user_oauth[0] = oauth
 
 
@@ -96,44 +96,55 @@ def clean_environment(users_path):
 def test_api(path):
     create_test_user()
     # shared_ss dir -> server_id = 9472
-
+    root = 0
+    oauth = user_oauth[0]
+    file_name = "file4"
+    folder_name = "folder4"
     is_ss_provider = True
     print "MAKE"
     start = time.time()
-    response = make(user_oauth[0], "151548", parent_id=39780, is_folder=False, is_ss_provider=is_ss_provider)
+    response = make(oauth, folder_name, parent_id=root, is_folder=True, is_ss_provider=is_ss_provider)
+    end = time.time()
+    print "MAKE folder", int(end - start)
+    json_data = json.loads(response.text)
+    folder_id = str(json_data["id"])
+    print "Folderid=", folder_id
+
+    print "MAKE"
+    start = time.time()
+    response = make(oauth, file_name, parent_id=folder_id, is_folder=False, is_ss_provider=is_ss_provider)
     end = time.time()
     print "MAKE file", int(end - start)
     print response
-    print response.headers
+    # print response.headers
     print response.text
-    print response.url
-    print response.links
+    # print response.url
+    # print response.links
     json_data = json.loads(response.text)
     server_id = json_data["id"]
-    print server_id
+    print "Fileid", server_id
 
     file_path = path + "/../README.md"
     print "PUT"
-    response = put_content(user_oauth[0], server_id, file_path, is_ss_provider=is_ss_provider)
+    response = put_content(oauth, server_id, file_path, is_ss_provider=is_ss_provider)
     print response
     print response.text
 
     print "GET"
-    response = get_content(user_oauth[0], server_id, is_ss_provider=is_ss_provider)
+    response = get_content(oauth, server_id, is_ss_provider=is_ss_provider)
     print response
-    print response.headers
+    # print response.headers
     print response.text
 
-    # print "MOVE"
-    # response = move(user_oauth[0], server_id, is_ss_provider=False)
-    # print response
-    # print response.text
-
-    print "DELETE"
-    response = unlink(user_oauth[0], server_id, is_ss_provider=False)
+    print "DELETE file"
+    response = unlink(oauth, server_id, is_ss_provider=is_ss_provider)
     print response
     print response.text
 
+    print "DELETE folder"
+    response = unlink(oauth, folder_id, is_folder=True, is_ss_provider=is_ss_provider)
+    print response
+    print response.text
 
 def print_usage():
     print "USAGE ERROR:"
@@ -148,7 +159,7 @@ def print_usage():
 if __name__ == "__main__":
     script_path = __file__[:__file__.rfind("/")]
     # # Rack
-    file_users_path = script_path + "/../target/cpd/users_full_interop_info.csv"
+    file_users_path = script_path + "/../traces/users_full_interop_info.csv"
     file_trace_path = script_path + "/../traces/interop_ops_without_moves_nanoseconds_accuracy.csv"
 
     # Local
