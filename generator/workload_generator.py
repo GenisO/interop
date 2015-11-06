@@ -1,9 +1,11 @@
 # encoding: utf-8
+from glob import glob
+import os
 import time
-from API_manager import *
-from requests_oauthlib import OAuth1
-from trace_processor import TraceProcessor, User
 from decimal import *
+
+from API_manager import *
+from trace_processor import TraceProcessor, User, process_debug_log
 
 user_oauth = dict()
 
@@ -40,7 +42,7 @@ def read_users_info(user_file):
                     provider = str(array_line[3])
                     shared_folder_id = str(array_line[4])
                     file0_id = str(array_line[5])
-                    friends_num = int(array_line[6])
+                    # friends_num = int(array_line[6])
                     list_size = len(array_line)
 
                     friends_dict = dict()
@@ -94,6 +96,7 @@ def clean_environment(users_path):
 def test_api(path):
     create_test_user()
     # shared_ss dir -> server_id = 9472
+
     is_ss_provider = True
     print "MAKE"
     start = time.time()
@@ -145,13 +148,14 @@ def print_usage():
 if __name__ == "__main__":
     script_path = __file__[:__file__.rfind("/")]
     # # Rack
-    # file_users_path = script_path + "/../target/cpd/users_full_interop_info.csv"
-    # file_trace_path = script_path + "/../traces/interop_ops_without_moves.csv"
+    file_users_path = script_path + "/../target/cpd/users_full_interop_info.csv"
+    file_trace_path = script_path + "/../traces/interop_ops_without_moves_nanoseconds_accuracy.csv"
 
     # Local
-    file_users_path = script_path + "/../target/ast3_full_interop_info.csv"
-    file_trace_path = script_path + "/../target/ast3_ops_norm.csv"
-    print __file__
+    # file_users_path = script_path + "/../target/test/ast3_users_credentials_server_id.csv"
+    # file_trace_path = script_path + "/../target/ast3_ops_norm.csv"
+    # file_trace_path = script_path + "/../traces/interop_ops_without_moves_nanoseconds_accuracy.csv"
+
     try:
         argv_list = sys.argv
 
@@ -162,6 +166,7 @@ if __name__ == "__main__":
                 # Run experiment
                 read_users_info(file_users_path)
                 run_threads_experiment(file_trace_path)
+                clean_environment(file_users_path)
             elif argv_list[1] == "clean":
                 clean_environment(file_users_path)
             elif argv_list[1] == "list":
@@ -187,6 +192,13 @@ if __name__ == "__main__":
             else:
                 print "ERROR: Option %s is not permitted" % (argv_list[1])
                 print_usage()
+                raise KeyboardInterrupt()
 
     except (KeyboardInterrupt, SystemExit):
+        try:
+            os.remove(glob("./*.file"))
+        except:
+            pass
         print ("\nExperiment killed")
+        process_debug_log("Experiment killed")
+

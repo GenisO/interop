@@ -364,11 +364,12 @@ if __name__ == "__main__":
     relations_path = script_path + "/../target/data/users_sharing_factor.csv"
 
     # Editable
-    # StackSync
-    ast3_users_path = script_path + "/../target/ast3_users.csv"
-    ast3_credentials_path = script_path + "/../target/ast3_users_credentials.csv"
-    ast3_server_id_path = script_path + "/../target/ast3_users_credentials_server_id.csv"
+    # ast3
+    ast3_users_path = script_path + "/../target/test/ast3_users.csv"
+    ast3_credentials_path = script_path + "/../target/test/ast3_users_credentials.csv"
+    ast3_server_id_path = script_path + "/../target/test/ast3_users_credentials_server_id.csv"
     # final_path = script_path + "/../target/ast3_full_interop_info.csv"
+
     # NEC
     nec_users_path = script_path + "/../target/nec_users.csv"
     nec_credentials_path = script_path + "/../target/nec_users_credentials.csv"
@@ -398,7 +399,7 @@ if __name__ == "__main__":
 
         # Correct steps
         # retrieve_credentials(nec_users_path, nec_credentials_path, False)
-        # retrieve_credentials(interop_users_path, interop_credentials_path, True)
+        retrieve_credentials(ast3_users_path, ast3_credentials_path, True)
         # credentials_path = script_path + "/../target/mini_test_users_credentials.csv"
         initialize_scenario(ast3_credentials_path, ast3_server_id_path)
         # process_friendship(data_path, relations_path, final_path)
