@@ -1,5 +1,5 @@
 # encoding: utf-8
-from collections import deque
+import json
 import os
 import time
 import random
@@ -9,12 +9,12 @@ import logging
 import logging.handlers
 import decimal
 import re
+import sys
 
-from API_manager import *
+from collections import deque
+from API_manager import list_content, unlink, make, put_content, get_content, move
 
-# TODO: Only for testing
-log_file_name = "/../interop_experiment.log"
-# log_file_name = "/../interop_experiment_%d.log" % (int(time.time()))
+log_file_name = "/../interop_experiment_%d.log" % (int(time.time()))
 log_file_trace_path = __file__[:__file__.rfind("/")] + log_file_name
 
 logger = logging.getLogger(__name__)
@@ -27,28 +27,26 @@ logger.addHandler(handler)
 random.seed(18)
 
 
-def process_log(op_order, tstamp, user_out_id, user_out_type, req_t, origin_provider, destination_provider, user_in_id,
-                node_id, node_type, size, elapsed, friends_number, has_error="0", trace="NULL",
-                exception="NULL", error_msg="NULL", args="NULL", level="TRACE"):
-    line = ("[%s];%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s" % (str(level),
-                                                    str(op_order), str(tstamp), str(user_out_id), str(user_out_type),
-                                                    str(req_t), str(origin_provider),
-                                                    str(destination_provider),
-                                                    str(user_in_id), str(node_id),
-                                                    str(node_type),
-                                                    str(size), str(elapsed), str(friends_number), str(has_error),
-                                                    str(trace), str(exception), str(error_msg), str(args)))
-    line = re.sub('[^a-zA-Z0-9,_;:\(\)\[\]\{\}\n\.]', ' ', line)
+def process_log(op_order, tstamp, queued_tstamp, user_out_id, user_out_type, req_t, origin_provider,
+                destination_provider, user_in_id, node_id, node_type, size, elapsed, friends_number, has_error="0",
+                trace="NULL", exception="NULL", error_msg="NULL", args="NULL", level="TRACE", url="NULL"):
+    line = ("[%s];%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%s" % (str(level), str(op_order),
+                                                                                  str(tstamp), str(queued_tstamp),
+                                                                                  str(user_out_id), str(user_out_type),
+                                                                                  str(req_t), str(origin_provider),
+                                                                                  str(destination_provider),
+                                                                                  str(user_in_id), str(node_id),
+                                                                                  str(node_type), str(size),
+                                                                                  str(elapsed), str(friends_number),
+                                                                                  str(has_error), str(trace),
+                                                                                  str(exception), str(error_msg),
+                                                                                  str(args), str(url)))
+    line = re.sub('[^a-zA-Z0-9,/_;:\(\)\[\]\{\}\n\.]', ' ', line)
     logger.info(line)
 
 
 def process_debug_log(message):
-    logger.info("[DEBUG] - %s" % (str(message)))
-
-
-def process_error_log(message):
-    # logger.error(str(message))
-    pass
+    logger.info("[DEBUG];%s" % (str(message)))
 
 
 class User(object):
@@ -73,8 +71,6 @@ class User(object):
         self.process_thread = None
         TraceProcessor.all_users_dict[self.id] = self
         TraceProcessor.users_list.append(user_id)
-        if self.provider == "SS":
-            TraceProcessor.ss_users_list.append(user_id)
 
 
 class TraceProcessor:
@@ -89,91 +85,99 @@ class TraceProcessor:
     csv_user_type = 8
     csv_friend_id = 9
     csv_provider = 10
+    csv_queued_tstamp = 11
 
     all_users_dict = dict()
     processing_threads = dict()
     users_list = list()
-    ss_users_list = list()
 
     has_error_code = 999
 
-    def __init__(self, p_trace_path, test=False):
+    def __init__(self, p_trace_path, p_generated_trace_path, test=False):
         self.trace_path = p_trace_path
+        self.generated_trace_path = p_generated_trace_path
         self.test_concurrency = test
         process_debug_log("Experiment has started")
-        process_log("op_order", "tstamp", "user_out_id", "user_out_type", "req_t", "origin_provider",
-                    "destination_provider", "user_in_id", "node_id", "node_type", "size", "elapsed",
-                    "friends_number", "has_error", "trace", "exception", "error_msg", "args")
+        process_log("op_order", "tstamp", "queued_tstamp", "user_out_id", "user_out_type", "req_t", "origin_provider",
+                    "destination_provider", "user_in_id", "node_id", "node_type", "size", "elapsed", "friends_number",
+                    has_error="has_error", trace="trace", exception="exception", error_msg="error_msg", args="args",
+                    url="url")
         self.event_dispatcher()
 
     def event_dispatcher(self):
-        previous_normalized_timestamp = decimal.Decimal("0.00000000")
-        previous_time = decimal.Decimal(time.time())
-
         # TODO: Only for testing
         if self.test_concurrency:
             self.prove_concurrency()
         else:
+            self.run_events()
+
+    def run_events(self):
+        previous_normalized_timestamp = decimal.Decimal("0.00000000")
+        start = decimal.Decimal(time.time())
+        with open(self.generated_trace_path, "w") as fw:
             with open(self.trace_path, "r") as fp:
                 for i, line in enumerate(fp):
                     print_seq_dots()
                     if i > 0:
-                        event = line.rstrip("\n").split(",")
+                        line = line.rstrip("\n")
+                        event = line.split(",")
                         if len(event) == 9:
-                            elapsed = decimal.Decimal(time.time()) - previous_time
-                            t_sleep = decimal.Decimal(
-                                event[TraceProcessor.csv_normalized_timestamp]) - previous_normalized_timestamp
-                            # Control sleep time
-                            t_sleep = t_sleep - elapsed
-                            if t_sleep < 0:
-                                t_sleep = decimal.Decimal("0.00000000")
-                            print_seq_dots(t_sleep.normalize().quantize(decimal.Decimal("0.001")))
-                            time.sleep(t_sleep)
-                            previous_normalized_timestamp = decimal.Decimal(
-                                event[TraceProcessor.csv_normalized_timestamp])
-
                             user_id = int(event[TraceProcessor.csv_user_id])
 
-                            user_id = TraceProcessor.users_list[user_id % len(TraceProcessor.users_list)]
-                            event[TraceProcessor.csv_user_id] = str(user_id)
-                            processed_event = self.preprocessor(event)
-                            user_id = processed_event[TraceProcessor.csv_friend_id]
+                            if user_id in TraceProcessor.all_users_dict:
+                                [do_event, processed_event] = self.preprocessor(event)
 
-                            new_thread = True
-                            if user_id in self.processing_threads:
-                                t1 = self.processing_threads[user_id]
-                                if t1.isAlive():
-                                    t1.add_event(i, event)
-                                    new_thread = False
+                                if do_event:
+                                    user_id = processed_event[TraceProcessor.csv_friend_id]
 
-                            if new_thread:
-                                t1 = ThreadedPetition(user_id, i, event)
-                                t1.setDaemon(True)
-                                t1.start()
-                                self.processing_threads[user_id] = t1
+                                    op_normalized_sleep = decimal.Decimal(event[TraceProcessor.csv_normalized_timestamp])
+                                    t_sleep = op_normalized_sleep - previous_normalized_timestamp
+                                    previous_normalized_timestamp = op_normalized_sleep
 
-                            previous_time = decimal.Decimal(time.time())
+                                    # Control sleep time
+                                    elapsed = decimal.Decimal(time.time()) - start
+                                    t_sleep = t_sleep - elapsed
+                                    if t_sleep < 0:
+                                        t_sleep = decimal.Decimal("0.00000000")
+                                    print_seq_dots(t_sleep.normalize().quantize(decimal.Decimal("0.001")))
+                                    time.sleep(t_sleep)
+                                    new_thread = True
+                                    if user_id in self.processing_threads:
+                                        t1 = self.processing_threads[user_id]
+                                        if t1.isAlive():
+                                            t1.add_event(i, event)
+                                            new_thread = False
+
+                                    if new_thread:
+                                        t1 = ThreadedPetition(user_id, i, event)
+                                        t1.setDaemon(True)
+                                        t1.start()
+                                        self.processing_threads[user_id] = t1
+
+                                    fw.write("%s\n" % (line))
+                                else:
+                                    process_debug_log("Avoided line [%s]" % (line))
+                            else:
+                                process_debug_log("Avoided line [%s]" % (line))
                         else:
-                            process_debug_log("Avoided line [%s]" % (",".join(line)))
-            self.wait_experiment()
+                            process_debug_log("Avoided line [%s]" % (line))
+                    start = decimal.Decimal(time.time())
+        self.wait_experiment()
 
     def preprocessor(self, event_args):
         user_id = int(event_args[TraceProcessor.csv_user_id])
 
         try:
             user = TraceProcessor.all_users_dict[user_id]
-            # TODO: Only for testing
-            if user.provider == "NEC":
-                raise KeyError
         except KeyError:
-            user_id = TraceProcessor.ss_users_list[user_id % len(TraceProcessor.ss_users_list)]
+            user_id = TraceProcessor.users_list[user_id % len(TraceProcessor.users_list)]
             user = TraceProcessor.all_users_dict[user_id]
             event_args[TraceProcessor.csv_user_id] = str(user_id)
 
-        p = decimal.Decimal(str(random.random()))
-
         factors = user.friends_id_factor_dict.values()
         if len(factors) > 0:
+            p = decimal.Decimal(str(random.random()))
+
             factors.sort()
             target = factors[-1]
             multiple = False
@@ -186,29 +190,29 @@ class TraceProcessor:
                     multiple = True
                     break
 
-            friends_id = []
+            friends_id_list = []
             for u in user.friends_id_factor_dict:
                 if user.friends_id_factor_dict[u] == target:
-                    friends_id.append(u)
+                    friends_id_list.append(u)
                     if not multiple:
                         break
 
-            friend_id = random.sample(friends_id, 1)[0]
+            friend_id = random.sample(friends_id_list, 1)[0]
             friend_id = TraceProcessor.users_list[friend_id % len(TraceProcessor.users_list)]
-            friend = TraceProcessor.all_users_dict[friend_id]
+
+            try:
+                friend = TraceProcessor.all_users_dict[friend_id]
+            except KeyError:
+                friend = user
+
+            event_args.append(friend.id)  # csv_friend_id
+            event_args.append(friend.provider)  # csv_provider
+
+            return [True, event_args]
         else:
-            friend = TraceProcessor.all_users_dict[user_id]
+            return [False, event_args]
 
-        # TODO: Only for testing
-        if friend.provider == "NEC":
-            friend = user
-
-        event_args.append(friend.id)  # csv_friend_id
-        event_args.append(friend.provider)  # csv_provider
-
-        return event_args
-
-    # TODO: Only for testing
+    # TODO: Obsolete
     def prove_concurrency(self):
         file_lines = 20000
         for total_ops in range(10, 50):
@@ -248,7 +252,7 @@ class TraceProcessor:
                 print "\n"
 
     def wait_experiment(self):
-        print "\nWaiting "
+        process_debug_log("Experiment waiting to finalize")
         wait = True
         while wait:
             wait = not wait
@@ -276,10 +280,14 @@ class ThreadedPetition(threading.Thread):
         self.user = user
 
         self.event_args = deque()
+        queued = time.time()
+        event.append(queued)
         self.event_args.append([ops_counter, event])
 
     def add_event(self, ops_counter, event):
         self.first_ops_counter = ops_counter
+        queued = time.time()
+        event.append(queued)
         self.event_args.append([ops_counter, event])
 
     def run(self):
@@ -296,7 +304,16 @@ class ThreadedPetition(threading.Thread):
                 "Unlink": self.process_delete,
             }
             func = switcher.get(event[TraceProcessor.csv_req_type])
-            func(event, ops_counter)
+            start = time.time()
+            has_error = func(event, ops_counter)
+            end = time.time()
+            elapsed = end - start
+            process_log(ops_counter, repr(start), repr(event[TraceProcessor.csv_queued_tstamp]),
+                        event[TraceProcessor.csv_user_id], event[TraceProcessor.csv_user_type],
+                        event[TraceProcessor.csv_req_type], event[TraceProcessor.csv_provider], "Unknown",
+                        event[TraceProcessor.csv_friend_id], event[TraceProcessor.csv_node_id],
+                        event[TraceProcessor.csv_node_type], event[TraceProcessor.csv_size], elapsed,
+                        len(self.event_args), level="THREAD", has_error=has_error)
 
         self.running = False
 
@@ -316,25 +333,26 @@ class ThreadedPetition(threading.Thread):
         is_ss_provider = friend.provider == "SS"
         server_id = None
 
+        url = "NULL"
         start = time.time()
         try:
             start = time.time()
             response = make(oauth, node_id, workspace, is_folder, is_ss_provider)
             end = time.time()
-
+            url = response.url
             if response.status_code == 201:
                 json_data = json.loads(response.text)
                 server_id = str(json_data["id"])
 
                 elapsed = end - start
-                process_log(str(ops_counter), str(repr(start)), str(user_id),
-                            str(event_args[TraceProcessor.csv_user_type]),
+                process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                            str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                             str(event_args[TraceProcessor.csv_req_type]),
                             str(TraceProcessor.all_users_dict[user_id].provider),
                             str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id),
                             str(server_id),
                             str(event_args[TraceProcessor.csv_node_type]), "NULL", str(elapsed),
-                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)))
+                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url))
             elif (response.status_code == 400 or response.status_code == 403) and "already" in response.text:
                 response = list_content(oauth, parent_id=workspace, is_ss_provider=is_ss_provider)
                 json_data = response.json()
@@ -348,17 +366,17 @@ class ThreadedPetition(threading.Thread):
                             server_id = tuppla["id"]
                             break
                     except KeyError:
-                        pass
+                        process_debug_log("Failed to extract file_id form get_content at %s" % (response.url))
                 elapsed = "0.000976085662842"
                 size = "NULL"
-                process_log(str(ops_counter), str(repr(time.time())), str(user_id),
-                            str(event_args[TraceProcessor.csv_user_type]),
+                process_log(str(ops_counter), str(repr(time.time())), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                            str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                             str(event_args[TraceProcessor.csv_req_type]),
                             str(TraceProcessor.all_users_dict[user_id].provider),
                             str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id),
                             str(server_id),
                             str(event_args[TraceProcessor.csv_node_type]), str(size), elapsed,
-                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)))
+                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url))
             else:
                 raise ValueError(
                     "Error on response with status_code %d and text {%s}" % (response.status_code, response.text))
@@ -370,6 +388,7 @@ class ThreadedPetition(threading.Thread):
                     friend.workspace_folders.append(server_id)
                 elif not is_folder and server_id not in friend.workspace_files:
                     friend.workspace_files.append(server_id)
+            return 0
         except Exception as e:
             trace = event_args
             exception = type(e)
@@ -381,14 +400,16 @@ class ThreadedPetition(threading.Thread):
                 server_id = node_id
 
             elapsed = time.time() - start
-            process_log(str(ops_counter), str(repr(start)), str(user_id), str(event_args[TraceProcessor.csv_user_type]),
+            process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                        str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                         str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
-                        str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), 
+                        str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
                         str(TraceProcessor.has_error_code), str(trace), str(exception), str(error_msg), str(args),
-                        str(level))
+                        str(level), url=str(url))
+            return TraceProcessor.has_error_code
 
     def process_put(self, event_args, ops_counter):
         process_debug_log("Count %d ProcessPutContentResponse node_id %d of user_id %s" % (ops_counter,
@@ -406,7 +427,7 @@ class ThreadedPetition(threading.Thread):
 
         server_id = None
         local_path = "./%s.file" % (self.ident)
-
+        url = "NULL"
         start = time.time()
         try:
             if node_id not in friend.node_server_id_dict:
@@ -418,8 +439,8 @@ class ThreadedPetition(threading.Thread):
                 server_id = friend.node_server_id_dict[node_id]
 
             # TODO: Only for testing
-            if size > 1000000000:
-                size = 1000000000
+            if size > 100000000:
+                size = 100000000
             if size < 1:
                 size = 2
             try:
@@ -433,19 +454,20 @@ class ThreadedPetition(threading.Thread):
                 level = "ERROR"
 
                 elapsed = time.time() - start
-                process_log(str(ops_counter), str(repr(start)), str(user_id),
-                            str(event_args[TraceProcessor.csv_user_type]),
+                process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                            str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                             str(event_args[TraceProcessor.csv_req_type]),
                             str(TraceProcessor.all_users_dict[user_id].provider),
                             str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                             str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
                             str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
                             str(TraceProcessor.has_error_code), str(trace), str(exception), str(error_msg), str(args),
-                            str(level))
+                            str(level), url=str(url))
 
             start = time.time()
             response = put_content(oauth, server_id, local_path, is_ss_provider)
             end = time.time()
+            url = response.url
 
             if response.status_code == 200 or response.status_code == 201:
                 elapsed = end - start
@@ -455,18 +477,18 @@ class ThreadedPetition(threading.Thread):
                     json_data = json.loads(response.text)
                     size = str(json_data["size"])
 
-                process_log(str(ops_counter), str(repr(start)), str(user_id),
-                            str(event_args[TraceProcessor.csv_user_type]),
+                process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                            str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                             str(event_args[TraceProcessor.csv_req_type]),
                             str(TraceProcessor.all_users_dict[user_id].provider),
                             str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id),
                             str(server_id),
                             str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
-                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)))
+                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url))
             else:
                 raise ValueError(
-                    "Error on response with status_code %d and text %s and url %s" % (response.status_code,
-                                                                                      response.text, response.url))
+                    "Error on response with status_code %d and text %s" % (response.status_code, response.text))
+            return 0
         except Exception as e:
             trace = event_args
             exception = type(e)
@@ -477,19 +499,21 @@ class ThreadedPetition(threading.Thread):
                 server_id = node_id
 
             elapsed = time.time() - start
-            process_log(str(ops_counter), str(repr(start)), str(user_id), str(event_args[TraceProcessor.csv_user_type]),
+            process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                        str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                         str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
                         str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
                         str(TraceProcessor.has_error_code), str(trace), str(exception), str(error_msg), str(args),
-                        str(level))
+                        str(level), url=str(url))
+            return TraceProcessor.has_error_code
         finally:
             try:
                 os.remove(local_path)
             except:
-                pass
+                process_debug_log("Failed to remove local file %s" % (local_path))
 
     def process_get(self, event_args, ops_counter):
         process_debug_log("Count %d ProcessGetContentResponse node_id %d of user_id %s" % (ops_counter,
@@ -504,6 +528,7 @@ class ThreadedPetition(threading.Thread):
         oauth = friend.oauth
         is_ss_provider = friend.provider == "SS"
         server_id = None
+        url = "NULL"
 
         start = time.time()
         try:
@@ -519,6 +544,7 @@ class ThreadedPetition(threading.Thread):
             start = time.time()
             response = get_content(oauth, server_id, is_ss_provider)
             end = time.time()
+            url = response.url
 
             if response.status_code != 200:
                 raise ValueError(
@@ -532,13 +558,15 @@ class ThreadedPetition(threading.Thread):
                 size = response.headers["content-length"]
                 error_msg = "NULL"
 
-            process_log(str(ops_counter), str(repr(start)), str(user_id), str(event_args[TraceProcessor.csv_user_type]),
+            process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                        str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                         str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
                         str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
-                        has_error=str("0"), error_msg=error_msg)
+                        has_error=str("0"), error_msg=error_msg, url=str(url))
+            return 0
         except Exception as e:
             trace = event_args
             exception = type(e)
@@ -550,14 +578,16 @@ class ThreadedPetition(threading.Thread):
                 server_id = node_id
 
             elapsed = time.time() - start
-            process_log(str(ops_counter), str(repr(start)), str(user_id), str(event_args[TraceProcessor.csv_user_type]),
+            process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                        str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                         str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
                         str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
                         str(TraceProcessor.has_error_code), str(trace), str(exception), str(error_msg), str(args),
-                        str(level))
+                        str(level), url=str(url))
+            return TraceProcessor.has_error_code
 
     def process_delete(self, event_args, ops_counter):
         process_debug_log("Count %d ProcessUnlink node_id %d of user_id %s" % (ops_counter,
@@ -577,6 +607,7 @@ class ThreadedPetition(threading.Thread):
 
         fake_delete = False
         server_id = None
+        url = "NULL"
 
         start = time.time()
         try:
@@ -603,6 +634,7 @@ class ThreadedPetition(threading.Thread):
                 start = time.time()
                 response = unlink(oauth, server_id, is_folder, is_ss_provider)
                 end = time.time()
+                url = response.url
 
                 if response.status_code == 200:
                     if is_folder:
@@ -616,32 +648,33 @@ class ThreadedPetition(threading.Thread):
 
                     elapsed = end - start
 
-                    process_log(str(ops_counter), str(repr(start)), str(user_id),
-                                str(event_args[TraceProcessor.csv_user_type]),
+                    process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                                str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                                 str(event_args[TraceProcessor.csv_req_type]),
                                 str(TraceProcessor.all_users_dict[user_id].provider),
                                 str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id),
                                 str(server_id),
                                 str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]),
                                 str(elapsed),
-                                str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)))
+                                str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url))
                 else:
                     raise ValueError(
                         "Error on response with status_code %d and text %s" % (response.status_code, response.text))
             else:
-                elapsed = "0.000976085662842"
+                elapsed = "0.725152481329475"
                 has_error = "0"
                 error_msg = "fake_delete"
 
-                process_log(str(ops_counter), str(repr(time.time())), str(user_id),
-                            str(event_args[TraceProcessor.csv_user_type]),
+                process_log(str(ops_counter), str(repr(time.time())), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                            str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                             str(event_args[TraceProcessor.csv_req_type]),
                             str(TraceProcessor.all_users_dict[user_id].provider),
                             str(TraceProcessor.all_users_dict[friend_id].provider),
                             str(friend_id), str(server_id), str(event_args[TraceProcessor.csv_node_type]),
                             str(event_args[TraceProcessor.csv_size]), str(elapsed),
                             str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
-                            has_error=str(has_error), error_msg=str(error_msg))
+                            has_error=str(has_error), error_msg=str(error_msg), url=str(url))
+            return 0
         except Exception as e:
             trace = event_args
             exception = type(e)
@@ -653,20 +686,21 @@ class ThreadedPetition(threading.Thread):
                 server_id = node_id
 
             elapsed = time.time() - start
-            process_log(str(ops_counter), str(repr(start)), str(user_id), str(event_args[TraceProcessor.csv_user_type]),
+            process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                        str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                         str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
                         str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
                         str(TraceProcessor.has_error_code), str(trace), str(exception), str(error_msg), str(args),
-                        str(level))
+                        str(level), url=str(url))
+            return TraceProcessor.has_error_code
 
     def process_move(self, event_args, ops_counter):
         process_debug_log("Count %d Process MoveResponse node_id %d of user_id %s" % (ops_counter,
                                                                           int(event_args[TraceProcessor.csv_node_id]),
                                                                           int(event_args[TraceProcessor.csv_user_id])))
-        pass
         user_id = int(event_args[TraceProcessor.csv_user_id])
         node_id = int(event_args[TraceProcessor.csv_node_id])
         is_folder = event_args[TraceProcessor.csv_node_type] == "Directory"
@@ -678,6 +712,7 @@ class ThreadedPetition(threading.Thread):
         is_ss_provider = friend.provider == "SS"
         destination_folder = friend.shared_folder_id
         server_id = None
+        url = "NULL"
 
         start = time.time()
         try:
@@ -705,6 +740,7 @@ class ThreadedPetition(threading.Thread):
             start = time.time()
             response = move(oauth, server_id, destination_folder, is_folder, is_ss_provider)
             end = time.time()
+            url = response.url
 
             if response.status_code != 200:
                 raise ValueError(
@@ -718,13 +754,15 @@ class ThreadedPetition(threading.Thread):
                 user.workspace_files.remove(server_id)
                 friend.workspace_files.append(server_id)
 
-            process_log(str(ops_counter), str(repr(start)), str(user_id), str(event_args[TraceProcessor.csv_user_type]),
+            process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                        str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                         str(event_args[TraceProcessor.csv_node_type]), str(event_args[TraceProcessor.csv_size]),
                         str(elapsed),
-                        str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)))
+                        str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url))
+            return 0
         except Exception as e:
             trace = event_args
             exception = type(e)
@@ -736,14 +774,16 @@ class ThreadedPetition(threading.Thread):
                 server_id = node_id
 
             elapsed = time.time() - start
-            process_log(str(ops_counter), str(repr(start)), str(user_id), str(event_args[TraceProcessor.csv_user_type]),
+            process_log(str(ops_counter), str(repr(start)), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
+                        str(user_id), str(event_args[TraceProcessor.csv_user_type]),
                         str(event_args[TraceProcessor.csv_req_type]),
                         str(TraceProcessor.all_users_dict[user_id].provider),
                         str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id), str(server_id),
                         str(event_args[TraceProcessor.csv_node_type]), str(size), str(elapsed),
                         str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)),
                         str(TraceProcessor.has_error_code), str(trace), str(exception), str(error_msg), str(args),
-                        str(level))
+                        str(level), url=str(url))
+            return TraceProcessor.has_error_code
 
 if __name__ == "__main__":
     print "Error: This class must be instantiated"
