@@ -96,7 +96,6 @@ class TraceProcessor:
     def __init__(self, p_trace_path, p_generated_trace_path, test=False):
         self.trace_path = p_trace_path
         self.generated_trace_path = p_generated_trace_path
-        self.test_concurrency = test
         process_debug_log("Experiment has started")
         process_log("op_order", "tstamp", "queued_tstamp", "user_out_id", "user_out_type", "req_t", "origin_provider",
                     "destination_provider", "user_in_id", "node_id", "node_type", "size", "elapsed", "friends_number",
@@ -105,15 +104,13 @@ class TraceProcessor:
         self.event_dispatcher()
 
     def event_dispatcher(self):
-        # TODO: Only for testing
-        if self.test_concurrency:
-            self.prove_concurrency()
-        else:
-            self.run_events()
+        self.run_events()
 
     def run_events(self):
         previous_normalized_timestamp = decimal.Decimal("0.00000000")
-        start = decimal.Decimal(time.time())
+        after_last_sleep = decimal.Decimal(time.time())
+        zero_decimal = decimal.Decimal("0.00000000")
+        decimal_print_precision = decimal.Decimal("0.001")
         with open(self.generated_trace_path, "w") as fw:
             with open(self.trace_path, "r") as fp:
                 for i, line in enumerate(fp):
@@ -130,17 +127,18 @@ class TraceProcessor:
                                 if do_event:
                                     user_id = processed_event[TraceProcessor.csv_friend_id]
 
-                                    op_normalized_sleep = decimal.Decimal(event[TraceProcessor.csv_normalized_timestamp])
-                                    t_sleep = op_normalized_sleep - previous_normalized_timestamp
-                                    previous_normalized_timestamp = op_normalized_sleep
+                                    current_normalized_timestamp = decimal.Decimal(event[TraceProcessor.csv_normalized_timestamp])
+                                    t_sleep = current_normalized_timestamp - previous_normalized_timestamp
+                                    previous_normalized_timestamp = current_normalized_timestamp
 
                                     # Control sleep time
-                                    elapsed = decimal.Decimal(time.time()) - start
-                                    t_sleep = t_sleep - elapsed
-                                    if t_sleep < 0:
+                                    processor_delay = decimal.Decimal(time.time()) - after_last_sleep
+                                    t_sleep = t_sleep - processor_delay
+                                    if t_sleep < zero_decimal:
                                         t_sleep = decimal.Decimal("0.00000000")
-                                    print_seq_dots(t_sleep.normalize().quantize(decimal.Decimal("0.001")))
+                                    print_seq_dots(t_sleep.normalize().quantize(decimal_print_precision))
                                     time.sleep(t_sleep)
+                                    after_last_sleep = decimal.Decimal(time.time())
                                     new_thread = True
                                     if user_id in self.processing_threads:
                                         t1 = self.processing_threads[user_id]
@@ -161,7 +159,6 @@ class TraceProcessor:
                                 process_debug_log("Avoided line [%s]" % (line))
                         else:
                             process_debug_log("Avoided line [%s]" % (line))
-                    start = decimal.Decimal(time.time())
         self.wait_experiment()
 
     def preprocessor(self, event_args):
@@ -211,45 +208,6 @@ class TraceProcessor:
             return [True, event_args]
         else:
             return [False, event_args]
-
-    # TODO: Obsolete
-    def prove_concurrency(self):
-        file_lines = 20000
-        for total_ops in range(10, 50):
-            for loop in range(0, int(total_ops / file_lines) + 1):
-                with open(self.trace_path, "r") as fp:
-                    for i, line in enumerate(fp):
-                        event = line.rstrip("\n").split(",")
-                        if i > 0 and len(event) == 9 and i + loop * file_lines < total_ops:
-                            user_id = int(event[TraceProcessor.csv_user_id])
-
-                            user_id = TraceProcessor.users_list[user_id % len(TraceProcessor.users_list)]
-                            event[TraceProcessor.csv_user_id] = str(user_id)
-                            processed_event = self.preprocessor(event)
-                            user_id = processed_event[TraceProcessor.csv_friend_id]
-
-                            # Always different
-                            # processed_event[TraceProcessor.csv_node_id] = str(int(time.time()))
-
-                            new_thread = True
-                            if user_id in self.processing_threads:
-                                t1 = self.processing_threads[user_id]
-                                if t1.isAlive():
-                                    t1.add_event(i, event)
-                                    new_thread = False
-
-                            if new_thread:
-                                t1 = ThreadedPetition(user_id, i, event)
-                                t1.setDaemon(True)
-                                t1.start()
-                                self.processing_threads[user_id] = t1
-                        elif i + loop * file_lines == total_ops:
-                            break
-                        else:
-                            process_debug_log("Avoided line [%s]" % (",".join(line)))
-                self.wait_experiment()
-                raw_input("Concurrent %d ops done! Press to next" % total_ops)
-                print "\n"
 
     def wait_experiment(self):
         process_debug_log("Experiment waiting to finalize")
@@ -354,10 +312,14 @@ class ThreadedPetition(threading.Thread):
                             str(event_args[TraceProcessor.csv_node_type]), "NULL", str(elapsed),
                             str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url))
             elif (response.status_code == 400 or response.status_code == 403) and "already" in response.text:
+                elapsed = end - start
+                start = time.time()
                 response = list_content(oauth, parent_id=workspace, is_ss_provider=is_ss_provider)
+                end = time.time()
                 json_data = response.json()
                 content_root = json_data["contents"]
                 server_id = None
+
                 for tuppla in content_root:
                     try:
                         name = tuppla["filename"]
@@ -367,7 +329,8 @@ class ThreadedPetition(threading.Thread):
                             break
                     except KeyError:
                         process_debug_log("Failed to extract file_id form get_content at %s" % (response.url))
-                elapsed = "0.000976085662842"
+                elapsed += end - start
+                error_msg = "existing_make"
                 size = "NULL"
                 process_log(str(ops_counter), str(repr(time.time())), str(repr(event_args[TraceProcessor.csv_queued_tstamp])),
                             str(user_id), str(event_args[TraceProcessor.csv_user_type]),
@@ -376,7 +339,7 @@ class ThreadedPetition(threading.Thread):
                             str(TraceProcessor.all_users_dict[friend_id].provider), str(friend_id),
                             str(server_id),
                             str(event_args[TraceProcessor.csv_node_type]), str(size), elapsed,
-                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url))
+                            str(len(TraceProcessor.all_users_dict[user_id].friends_id_factor_dict)), url=str(url), error_msg=error_msg)
             else:
                 raise ValueError(
                     "Error on response with status_code %d and text {%s}" % (response.status_code, response.text))
@@ -438,9 +401,6 @@ class ThreadedPetition(threading.Thread):
             else:
                 server_id = friend.node_server_id_dict[node_id]
 
-            # TODO: Only for testing
-            if size > 100000000:
-                size = 100000000
             if size < 1:
                 size = 2
             try:
